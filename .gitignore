@@ -1,0 +1,5 @@
+.env
+.DS_Store
+*.sw*
+proof.json
+verify_proof_compiled.json
