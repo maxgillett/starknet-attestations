@@ -1,5 +1,5 @@
-from bigint import BASE, BigInt3, UnreducedBigInt3, nondet_bigint3
-from secp_def import SECP_REM
+from lib.secp.bigint import BASE, BigInt3, UnreducedBigInt3, nondet_bigint3
+from lib.secp.secp_def import SECP_REM
 
 # Multiplies two values modulo the secp256k1 prime.
 # The returned limbs may be above 3 * BASE.

@@ -4,8 +4,8 @@ from starkware.cairo.common.math import assert_le, unsigned_div_rem
 
 struct IntArray:
     member elements: felt*
-    member byte_length: felt # total number of bytes
-    member length: felt
+    member word_len: felt # number of 64-bit words
+    member byte_len: felt # total number of bytes
 end
 
 

@@ -7,10 +7,10 @@
 #       0x483ada7726a3c4655da4fbfc0e1108a8fd17b448a68554199c47d08ffb10d4b8
 #   )
 
-from bigint import BASE, BigInt3, UnreducedBigInt3, bigint_mul, nondet_bigint3
-from secp_def import N0, N1, N2
-from secp_ec import EcPoint, ec_add, ec_mul
-from secp_field import unreduced_mul, unreduced_sqr, verify_zero
+from lib.secp.bigint import BASE, BigInt3, UnreducedBigInt3, bigint_mul, nondet_bigint3
+from lib.secp.secp_def import N0, N1, N2
+from lib.secp.secp_ec import EcPoint, ec_add, ec_mul
+from lib.secp.secp_field import unreduced_mul, unreduced_sqr, verify_zero
 
 from starkware.cairo.common.math import assert_nn_le, assert_not_zero, assert_in_range
 
@@ -129,7 +129,7 @@ func ecdsa_raw_recover{range_check_ptr}(
     #let (R_y : BigInt3) = nondet_bigint3()
 
     # Compute r^{-1}
-    let (r_inv) = mul_s_inv(BigInt3(d0=1, d1=0, d2=0), r)
+    let (r_inv) = mul_s_inv(BigInt3(d0=1, d1=0, d2=0), R_x)
 
     let R = EcPoint(R_x, R_y)
     let (x_1) = ec_mul(R, s)
