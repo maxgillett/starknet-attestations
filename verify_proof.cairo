@@ -190,7 +190,8 @@ func encode_kv_position{range_check_ptr, bitwise_ptr: BitwiseBuiltin*}(
 	let (local input3) = swap_endian(slot.elements[3], 8)
     assert input[3] = input3
 
-    let (out) = keccak256(input, 64)
+    let (local keccak_ptr : felt*) = alloc()
+    let (out) = keccak256{keccak_ptr=keccak_ptr}(input, 64)
     local key: IntArray = IntArray(out, 4, 32)
     return (key)
 end
@@ -217,18 +218,22 @@ end
 
 func hash_eip191_message{range_check_ptr, bitwise_ptr: BitwiseBuiltin*}(
         message: IntArray) -> (msg_hash : BigInt3):
-    let (output) = keccak256(message.elements, message.byte_len)
+    alloc_locals
+    let (local keccak_ptr : felt*) = alloc()
+    let (output) = keccak256{keccak_ptr=keccak_ptr}(message.elements, message.byte_len)
     let (msg_hash) = felts_to_bigint3(output)
     return (msg_hash)
 end
 
 func recover_address{range_check_ptr, bitwise_ptr: BitwiseBuiltin*}(
         msg_hash: BigInt3, R_x: BigInt3, R_y: BigInt3, s: BigInt3, v: felt) -> (address: IntArray):
+    alloc_locals
     let (public_key) = ecdsa_raw_recover(msg_hash, R_x, R_y, s, v)
     let (elements_x) = bigint3_to_ints64(public_key.y)
     let (elements_y) = bigint3_to_ints64(public_key.y)
     let (elements_pubkey) = concat_arr(IntArray(elements_x, 4, 32), IntArray(elements_y, 4, 32))
-    let (hash) = keccak256(elements_pubkey.elements, 64)
+    let (local keccak_ptr : felt*) = alloc()
+    let (hash) = keccak256{keccak_ptr=keccak_ptr}(elements_pubkey.elements, 64)
     let (address) = slice_arr(IntArray(hash, 4, 32), 12, 32) 
     return (address)
 end
@@ -298,11 +303,11 @@ func encode_proof() -> (proof : Proof*):
     local balance : felt
     local nonce : felt
 
-    local elements : felt*
-	local elements2 : felt*
-    local elements4 : felt*
-    local elements5 : felt*
-    local elements6 : felt*
+    local address : IntArray
+    local state_root : IntArray 
+    local code_hash : IntArray 
+    local storage_slot : IntArray
+    local storage_hash : IntArray
 
     local message : IntArray
     local message_hash : BigInt3
@@ -311,79 +316,83 @@ func encode_proof() -> (proof : Proof*):
     local v : felt
 
 	let (account_proof : IntArray*) = alloc()
-    local storage_proof : StorageProof
+	let (storage_proof : IntArray*) = alloc()
+
+    local storage_key : IntArray
+    local storage_value : IntArray
 
     %{
+        from starkware.cairo.common.cairo_secp.secp_utils import split
+        
         def load_ints(felts, byte_str):
             for i in range(0, len(byte_str) // 16):
                 memory[felts + i] = int(byte_str[i*16 : (i+1) * 16], 16)
 
+        def load_intarray(base_addr, hex_input):
+            elements = segments.add()
+            for j in range(0, len(hex_input) // 16 + 1):
+                hex_str = hex_input[j*16 : (j+1) * 16]
+                if len(hex_str) > 0:
+                    memory[elements + j] = int(hex_str, 16)
+            memory[base_addr + ids.IntArray.elements] = elements
+            memory[base_addr + ids.IntArray.word_len] = int(len(hex_input) / 2 / 8)
+            memory[base_addr + ids.IntArray.byte_len] = int(len(hex_input) / 2)
+
+        def load_bigint3(base_addr, input):
+            d0, d1, d2 = split(input)
+            memory[base_addr + ids.BigInt3.d0] = d0
+            memory[base_addr + ids.BigInt3.d1] = d1
+            memory[base_addr + ids.BigInt3.d2] = d2
+
         # Contract address
-        address = program_input['address'][2:]
-        ids.elements = elements = segments.add()
-        for i in range(0, len(address) // 16 + 1):
-            memory[elements + i] = int(address[i*16 : (i+1) * 16], 16)
-            #print(hex(memory[elements + i])[2:])
+        load_intarray(ids.address.address_, program_input['address'][2:])
 
         # State root
-        state_root = program_input['stateRoot'][2:]
-        ids.elements2 = elements2 = segments.add()
-        for i in range(0, len(state_root) // 16):
-            memory[elements2 + i] = int(state_root[i*16 : (i+1) * 16], 16)
-
-        # Account proofs
-        for i, proof in enumerate(program_input['accountProof']):
-            proof = proof[2:]
-            base_addr = ids.account_proof.address_ + ids.IntArray.SIZE * i
-            elements3 = segments.add()
-            for j in range(0, len(proof) // 16 + 1):
-                memory[elements3 + j] = int(proof[j*16 : (j+1) * 16], 16)
-            memory[base_addr + ids.IntArray.elements] = elements3
-            memory[base_addr + ids.IntArray.byte_length] = int(len(proof) / 2)
+        load_intarray(ids.state_root.address_, program_input['stateRoot'][2:])
 
         # Balance
-        balance = program_input['balance']
-        ids.balance = balance
-
-        # Code hash
-        code_hash = program_input['codeHash'][2:]
-        ids.elements4 = elements4 = segments.add()
-        for i in range(0, len(code_hash) // 16):
-            memory[elements4 + i] = int(code_hash[i*16 : (i+1) * 16], 16)
+        ids.balance = program_input['balance']
 
         # Nonce
-        balance = program_input['balance']
-        ids.balance = balance
+        ids.nonce = program_input['nonce']
+
+        # Code hash
+        load_intarray(ids.code_hash.address_, program_input['codeHash'][2:])
 
         # Storage slot
-        storage_slot = program_input['storageSlot'][2:]
-        ids.elements5 = elements5 = segments.add()
-        load_ints(elements5, storage_slot)
+        load_intarray(ids.storage_slot.address_, program_input['storageSlot'][2:])
 
         # Storage hash
-        storage_hash = program_input['storageHash'][2:]
-        ids.elements6 = elements6 = segments.add()
-        load_ints(elements6, storage_hash)
+        load_intarray(ids.storage_hash.address_, program_input['storageHash'][2:])
+
+        # Account proof
+        for i, proof in enumerate(program_input['accountProof']):
+            base_addr = ids.account_proof.address_ + ids.IntArray.SIZE * i
+            load_intarray(base_addr, proof[2:])
 
         # Storage proof (no support for multiple proofs right now)
-        for i, proof in enumerate(program_input['storageProof']):
-            key = proof['key'][2:]
-            value = proof['value'][2:]
-            proof_data = proof['proof'][2:]
+        for i, proof in enumerate(program_input['storageProof'][0]['proof']):
+            base_addr = ids.storage_proof.address_ + ids.IntArray.SIZE * i
+            load_intarray(base_addr, proof[2:])
+
+        load_intarray(ids.storage_key.address_, program_input['storageProof'][0]['key'][2:])
+        load_intarray(ids.storage_value.address_, program_input['storageProof'][0]['value'][2:])
 
         # Signature
-        # TODO
+        load_intarray(ids.message.address_, program_input['signature']['message'][2:])
+        load_bigint3(ids.message_hash.address_, int(program_input['signature']['messageHash'], 16))
+        load_bigint3(ids.R_x.address_, program_input['signature']['R_x'])
+        load_bigint3(ids.R_y.address_, program_input['signature']['R_y'])
+        ids.v = program_input['signature']['v']
 	%}
 
-    let address = IntArray(elements=elements, word_len=3, byte_len=20)
-    let state_root = IntArray(state_root=elements2, word_len=4, byte_len=32)
-    let code_hash = IntArray(state_root=elements4, word_len=4, byte_len=32)
-    let storage_slot = IntArray(state_root=elements5, word_len=4, byte_len=32)
-    let storage_hash = IntArray(state_root=elements6, word_len=4, byte_len=32)
-    let signature = Signature(
+    local signature : Signature = Signature(
         message=message, message_hash=message_hash, R_x=R_x, R_y=R_y, v=v)
 
-    local proof : Proof = Proof(
+    local storage : StorageProof = StorageProof(
+        key=storage_key, value=storage_value, proof=storage_proof)
+
+    local proof: Proof = Proof(
         address=address,
         state_root=state_root,
         account_proof=account_proof,
@@ -392,7 +401,7 @@ func encode_proof() -> (proof : Proof*):
         nonce=nonce,
         storage_slot=storage_slot,
         storage_hash=storage_hash,
-        storage_proof=storage_proof,
+        storage_proof=storage,
         signature=signature)
 
     let (__fp__, _) = get_fp_and_pc()
