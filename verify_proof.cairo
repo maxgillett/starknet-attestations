@@ -35,7 +35,7 @@ end
 
 struct Proof:
     member address: IntArray
-	member state_root: IntArray
+    member state_root: IntArray
     member account_proof: IntsSequence*
     member account_proof_len: felt
     member balance: felt
@@ -51,11 +51,11 @@ end
 func keccak256_20{range_check_ptr, bitwise_ptr: BitwiseBuiltin*}(input_ptr: felt*) -> (trie_key: felt*):
     alloc_locals
     let (local input : felt*) = alloc()
-	let (local input0) = swap_endian(input_ptr[0], 8)
+    let (local input0) = swap_endian(input_ptr[0], 8)
     assert input[0] = input0 
-	let (local input1) = swap_endian(input_ptr[1], 8)
+    let (local input1) = swap_endian(input_ptr[1], 8)
     assert input[1] = input1
-	let (local input2) = swap_endian(input_ptr[2], 4)
+    let (local input2) = swap_endian(input_ptr[2], 4)
     assert input[2] = input2    
     local bitwise_ptr_start : BitwiseBuiltin* = bitwise_ptr
     let (local keccak_ptr : felt*) = alloc()
@@ -119,7 +119,7 @@ end
 #func to_ints_seq_ptr(int_arrays: IntArray*) -> (res: IntsSequence*):
 #    # TODO
 #    int_arrays
-#	let (res : IntsSequence*) = alloc()
+#   let (res : IntsSequence*) = alloc()
 #    return (res)
 #end
 
@@ -162,7 +162,7 @@ end
 
 func lpad(input: IntArray) -> (res: IntArray):
     # TODO
-	let (elements : felt*) = alloc()
+    let (elements : felt*) = alloc()
     #input.elements[0] # 8 bytes
     #input.elements[1] # 8 bytes
     #input.elements[2] # 4 bytes
@@ -172,25 +172,25 @@ end
 func encode_kv_position{range_check_ptr, bitwise_ptr: BitwiseBuiltin*}(
         slot: IntArray, address: IntArray) -> (key : IntArray):
     alloc_locals
-	let (input : felt*) = alloc()
+    let (input : felt*) = alloc()
 
     # Address
     assert input[0] = 0 
-	let (local input1) = swap_endian(address.elements[1], 8)
+    let (local input1) = swap_endian(address.elements[1], 8)
     assert input[2] = input1
-	let (local input2) = swap_endian(address.elements[2], 8)
+    let (local input2) = swap_endian(address.elements[2], 8)
     assert input[3] = input2
-	let (local input3) = swap_endian(address.elements[3], 8)
+    let (local input3) = swap_endian(address.elements[3], 8)
     assert input[4] = input3
 
     # Storage slot
-	let (local input0) = swap_endian(slot.elements[0], 8)
+    let (local input0) = swap_endian(slot.elements[0], 8)
     assert input[0] = input0 
-	let (local input1) = swap_endian(slot.elements[1], 8)
+    let (local input1) = swap_endian(slot.elements[1], 8)
     assert input[1] = input1
-	let (local input2) = swap_endian(slot.elements[2], 8)
+    let (local input2) = swap_endian(slot.elements[2], 8)
     assert input[2] = input2    
-	let (local input3) = swap_endian(slot.elements[3], 8)
+    let (local input3) = swap_endian(slot.elements[3], 8)
     assert input[3] = input3
 
     let (local keccak_ptr : felt*) = alloc()
@@ -328,8 +328,8 @@ func encode_proof() -> (proof : Proof*):
     local R_y : BigInt3
     local v : felt
 
-	let (account_proof : IntsSequence*) = alloc()
-	let (storage_proof0 : IntsSequence*) = alloc()
+    let (account_proof : IntsSequence*) = alloc()
+    let (storage_proof0 : IntsSequence*) = alloc()
 
     local storage_key : IntArray
     local storage_value : IntArray
@@ -397,7 +397,7 @@ func encode_proof() -> (proof : Proof*):
         load_bigint3(ids.R_x.address_, program_input['signature']['R_x'])
         load_bigint3(ids.R_y.address_, program_input['signature']['R_y'])
         ids.v = program_input['signature']['v']
-	%}
+    %}
 
     local storage_proof : StorageProof = StorageProof(
         key=storage_key, value=storage_value, proof=storage_proof0)
