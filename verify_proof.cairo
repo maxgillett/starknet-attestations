@@ -30,19 +30,21 @@ end
 struct StorageProof:
     member key: IntArray
     member value: IntArray
-    member proof: IntArray*
+    member proof: IntsSequence*
 end
 
 struct Proof:
     member address: IntArray
 	member state_root: IntArray
-    member account_proof: IntArray*
+    member account_proof: IntsSequence*
+    member account_proof_len: felt
     member balance: felt
     member code_hash: IntArray
     member nonce: felt
     member storage_slot: IntArray
     member storage_hash: IntArray
     member storage_proof: StorageProof
+    member storage_proof_len: felt
     member signature: Signature
 end
 
@@ -107,18 +109,19 @@ end
 
 func to_ints_seq(int_array: IntArray) -> (res: IntsSequence):
     let res = IntsSequence(
-        elements=int_array.elements,
+        element=int_array.elements,
         element_size_words=int_array.word_len,
         element_size_bytes=int_array.byte_len
     )
     return (res)
 end
 
-func to_ints_seq_ptr(int_arrays: IntArray*) -> (res: IntsSequence*):
-    # TODO
-	let (res : IntsSequence*) = alloc()
-    return (res)
-end
+#func to_ints_seq_ptr(int_arrays: IntArray*) -> (res: IntsSequence*):
+#    # TODO
+#    int_arrays
+#	let (res : IntsSequence*) = alloc()
+#    return (res)
+#end
 
 func slice_arr(array: IntArray, start_pos: felt, end_pos: felt) -> (res: IntArray):
     # TODO
@@ -200,18 +203,18 @@ func extract_verification_arguments(proof_ptr : Proof*, proof_type: felt) -> (
         root_hash: IntsSequence,
         proof: IntsSequence*,
         proof_len: felt):
-    # TODO
+    alloc_locals
     if proof_type == ACCOUNT:
         let (root) = to_ints_seq(proof_ptr.state_root)
-        let (proof) = to_ints_seq_ptr(proof_ptr.account_proof)
-        #let (len) = proof_ptr.account_proof_len 
-        return (root, proof, 0)
+        local proof : IntsSequence* = proof_ptr.account_proof
+        local len = proof_ptr.account_proof_len 
+        return (root, proof, len)
     end
     if proof_type == STORAGE:
         let (root) = to_ints_seq(proof_ptr.storage_hash)
-        let (proof) = to_ints_seq_ptr(proof_ptr.storage_proof.proof)
-        #let (len) = proof_ptr.account_proof_len # TODO
-        return (root, proof, 0)
+        local proof : IntsSequence* = proof_ptr.storage_proof.proof
+        local len = proof_ptr.storage_proof_len
+        return (root, proof, len)
     end
     ret
 end
@@ -249,6 +252,14 @@ func verify_account_proof{output_ptr : felt*, range_check_ptr, bitwise_ptr: Bitw
 
     # Retrieve RLP encoded account data from proof
     let (root_hash, proof, proof_len) = extract_verification_arguments(proof_ptr, ACCOUNT)
+    %{
+        output = ''.join(v.to_bytes(8, 'little').hex() for v in memory.get_range(ids.path.element, 4))
+        print(output)
+        from web3 import Web3
+        assert '0x' + output == Web3.keccak(0xC18360217D8F7Ab5e7c516566761Ea12Ce7F9D72).hex()
+        output2 = ''.join(v.to_bytes(8, 'big').hex() for v in memory.get_range(ids.root_hash.element, 4))
+        print(output2)
+    %}
     let (local account_data: IntsSequence) = verify_proof(path, root_hash, proof, proof_len)
     let (nonce, balance, storage_root, code_hash) = extract_account(account_data) 
     
@@ -302,6 +313,8 @@ func encode_proof() -> (proof : Proof*):
 
     local balance : felt
     local nonce : felt
+    local account_proof_len : felt
+    local storage_proof_len : felt
 
     local address : IntArray
     local state_root : IntArray 
@@ -315,8 +328,8 @@ func encode_proof() -> (proof : Proof*):
     local R_y : BigInt3
     local v : felt
 
-	let (account_proof : IntArray*) = alloc()
-	let (storage_proof : IntArray*) = alloc()
+	let (account_proof : IntsSequence*) = alloc()
+	let (storage_proof0 : IntsSequence*) = alloc()
 
     local storage_key : IntArray
     local storage_value : IntArray
@@ -338,45 +351,45 @@ func encode_proof() -> (proof : Proof*):
             memory[base_addr + ids.IntArray.word_len] = int(len(hex_input) / 2 / 8)
             memory[base_addr + ids.IntArray.byte_len] = int(len(hex_input) / 2)
 
+        # TODO: Combine usage of IntArray and IntsSequence into single data struct
+        def load_intseq(base_addr, hex_input):
+            elements = segments.add()
+            for j in range(0, len(hex_input) // 16 + 1):
+                hex_str = hex_input[j*16 : (j+1) * 16]
+                if len(hex_str) > 0:
+                    memory[elements + j] = int(hex_str, 16)
+            memory[base_addr + ids.IntsSequence.element] = elements
+            memory[base_addr + ids.IntsSequence.element_size_words] = int(len(hex_input) / 2 / 8)
+            memory[base_addr + ids.IntsSequence.element_size_bytes] = int(len(hex_input) / 2)
+
         def load_bigint3(base_addr, input):
             d0, d1, d2 = split(input)
             memory[base_addr + ids.BigInt3.d0] = d0
             memory[base_addr + ids.BigInt3.d1] = d1
             memory[base_addr + ids.BigInt3.d2] = d2
 
-        # Contract address
-        load_intarray(ids.address.address_, program_input['address'][2:])
-
-        # State root
-        load_intarray(ids.state_root.address_, program_input['stateRoot'][2:])
-
-        # Balance
         ids.balance = program_input['balance']
-
-        # Nonce
         ids.nonce = program_input['nonce']
+        ids.account_proof_len = len(program_input['accountProof'])
+        ids.storage_proof_len = len(program_input['storageProof'][0]['proof'])
 
-        # Code hash
+        load_intarray(ids.address.address_, program_input['address'][2:])
+        load_intarray(ids.state_root.address_, program_input['stateRoot'][2:])
         load_intarray(ids.code_hash.address_, program_input['codeHash'][2:])
-
-        # Storage slot
         load_intarray(ids.storage_slot.address_, program_input['storageSlot'][2:])
-
-        # Storage hash
         load_intarray(ids.storage_hash.address_, program_input['storageHash'][2:])
+        load_intarray(ids.storage_key.address_, program_input['storageProof'][0]['key'][2:])
+        load_intarray(ids.storage_value.address_, program_input['storageProof'][0]['value'][2:])
 
         # Account proof
         for i, proof in enumerate(program_input['accountProof']):
-            base_addr = ids.account_proof.address_ + ids.IntArray.SIZE * i
-            load_intarray(base_addr, proof[2:])
+            base_addr = ids.account_proof.address_ + ids.IntsSequence.SIZE * i
+            load_intseq(base_addr, proof[2:])
 
-        # Storage proof (no support for multiple proofs right now)
+        # Storage proof (TODO: add support for more than one proof)
         for i, proof in enumerate(program_input['storageProof'][0]['proof']):
-            base_addr = ids.storage_proof.address_ + ids.IntArray.SIZE * i
-            load_intarray(base_addr, proof[2:])
-
-        load_intarray(ids.storage_key.address_, program_input['storageProof'][0]['key'][2:])
-        load_intarray(ids.storage_value.address_, program_input['storageProof'][0]['value'][2:])
+            base_addr = ids.storage_proof0.address_ + ids.IntsSequence.SIZE * i
+            load_intseq(base_addr, proof[2:])
 
         # Signature
         load_intarray(ids.message.address_, program_input['signature']['message'][2:])
@@ -386,22 +399,22 @@ func encode_proof() -> (proof : Proof*):
         ids.v = program_input['signature']['v']
 	%}
 
+    local storage_proof : StorageProof = StorageProof(
+        key=storage_key, value=storage_value, proof=storage_proof0)
     local signature : Signature = Signature(
         message=message, message_hash=message_hash, R_x=R_x, R_y=R_y, v=v)
-
-    local storage : StorageProof = StorageProof(
-        key=storage_key, value=storage_value, proof=storage_proof)
-
     local proof: Proof = Proof(
         address=address,
         state_root=state_root,
         account_proof=account_proof,
+        account_proof_len=account_proof_len,
         balance=balance,
         code_hash=code_hash,
         nonce=nonce,
         storage_slot=storage_slot,
         storage_hash=storage_hash,
-        storage_proof=storage,
+        storage_proof=storage_proof,
+        storage_proof_len=storage_proof_len,
         signature=signature)
 
     let (__fp__, _) = get_fp_and_pc()
