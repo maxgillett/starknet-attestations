@@ -7,6 +7,8 @@ from lib.storage_verification.keccak import keccak256
 from lib.storage_verification.trie_proofs import verify_proof
 from lib.storage_verification.extract_from_rlp import extract_data
 from lib.storage_verification.types import IntsSequence
+from lib.storage_verification.swap_endianness import swap_endianness_four_words
+from lib.storage_verification.comp_arr import arr_eq
 
 from lib.secp.secp import ecdsa_raw_recover
 from lib.secp.bigint import BigInt3
@@ -60,9 +62,10 @@ func keccak256_20{range_check_ptr, bitwise_ptr: BitwiseBuiltin*}(input_ptr: felt
     local bitwise_ptr_start : BitwiseBuiltin* = bitwise_ptr
     let (local keccak_ptr : felt*) = alloc()
     let keccak_ptr_start = keccak_ptr
-    let (trie_key) = keccak{keccak_ptr=keccak_ptr}(input, 20)
+    let (trie_key_le) = keccak{keccak_ptr=keccak_ptr}(input, 20)
     finalize_keccak(keccak_ptr_start=keccak_ptr_start, keccak_ptr_end=keccak_ptr)
-    return (trie_key)
+    let (trie_key_be) = swap_endianness_four_words(IntsSequence(trie_key_le, 4, 32))
+    return (trie_key_be.element)
 end
 
 
@@ -248,24 +251,22 @@ func verify_account_proof{output_ptr : felt*, range_check_ptr, bitwise_ptr: Bitw
     # Compute trie key
     let input_ptr : felt* = proof_ptr.address.elements
     let (elements) = keccak256_20(input_ptr)
-    local path: IntsSequence = IntsSequence(elements, 4, 32) # 32 bytes (4 64-bit ints)
+    local path: IntsSequence = IntsSequence(elements, 4, 32)
 
     # Retrieve RLP encoded account data from proof
     let (root_hash, proof, proof_len) = extract_verification_arguments(proof_ptr, ACCOUNT)
-    %{
-        output = ''.join(v.to_bytes(8, 'little').hex() for v in memory.get_range(ids.path.element, 4))
-        print(output)
-        from web3 import Web3
-        assert '0x' + output == Web3.keccak(0xC18360217D8F7Ab5e7c516566761Ea12Ce7F9D72).hex()
-        output2 = ''.join(v.to_bytes(8, 'big').hex() for v in memory.get_range(ids.root_hash.element, 4))
-        print(output2)
-    %}
     let (local account_data: IntsSequence) = verify_proof(path, root_hash, proof, proof_len)
     let (nonce, balance, storage_root, code_hash) = extract_account(account_data) 
     
-    # TODO: Compare derived hashes
-    #assert storage_root = proof_ptr.storage_hash
-    #assert code_hash = proof_ptr.code_hash
+    # Compare derived hashes
+    let (local storage_root_match: felt) = arr_eq(
+        storage_root.element, storage_root.element_size_words,
+        proof_ptr.storage_hash.elements, proof_ptr.storage_hash.word_len)
+    let (local code_hash_match: felt) = arr_eq(
+        code_hash.element, code_hash.element_size_words,
+        proof_ptr.code_hash.elements, proof_ptr.code_hash.word_len)
+    assert storage_root_match = 1
+    assert code_hash_match = 1
 
     return ()
 end
@@ -335,6 +336,7 @@ func encode_proof() -> (proof : Proof*):
     local storage_value : IntArray
 
     %{
+        from math import ceil
         from starkware.cairo.common.cairo_secp.secp_utils import split
         
         def load_ints(felts, byte_str):
@@ -348,7 +350,7 @@ func encode_proof() -> (proof : Proof*):
                 if len(hex_str) > 0:
                     memory[elements + j] = int(hex_str, 16)
             memory[base_addr + ids.IntArray.elements] = elements
-            memory[base_addr + ids.IntArray.word_len] = int(len(hex_input) / 2 / 8)
+            memory[base_addr + ids.IntArray.word_len] = int(ceil(len(hex_input) / 2. / 8))
             memory[base_addr + ids.IntArray.byte_len] = int(len(hex_input) / 2)
 
         # TODO: Combine usage of IntArray and IntsSequence into single data struct
@@ -359,7 +361,7 @@ func encode_proof() -> (proof : Proof*):
                 if len(hex_str) > 0:
                     memory[elements + j] = int(hex_str, 16)
             memory[base_addr + ids.IntsSequence.element] = elements
-            memory[base_addr + ids.IntsSequence.element_size_words] = int(len(hex_input) / 2 / 8)
+            memory[base_addr + ids.IntsSequence.element_size_words] = int(ceil(len(hex_input) / 2. / 8))
             memory[base_addr + ids.IntsSequence.element_size_bytes] = int(len(hex_input) / 2)
 
         def load_bigint3(base_addr, input):
