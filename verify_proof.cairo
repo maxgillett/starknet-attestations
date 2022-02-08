@@ -1,7 +1,7 @@
 %builtins output range_check bitwise
 
 from lib.keccak import keccak, finalize_keccak
-from lib.bytes_utils import slice, IntArray, swap_endian
+from lib.bytes_utils import slice_arr, IntArray, swap_endian
 
 from lib.storage_verification.keccak import keccak256
 from lib.storage_verification.trie_proofs import verify_proof
@@ -9,11 +9,12 @@ from lib.storage_verification.extract_from_rlp import extract_data
 from lib.storage_verification.types import IntsSequence
 from lib.storage_verification.swap_endianness import swap_endianness_four_words
 from lib.storage_verification.comp_arr import arr_eq
+from lib.storage_verification.concat_arr import concat_arr
 
 from lib.secp.secp import ecdsa_raw_recover
 from lib.secp.bigint import BigInt3
 
-from starkware.cairo.common.uint256 import Uint256, uint256_lt
+from starkware.cairo.common.uint256 import Uint256, uint256_lt, uint256_unsigned_div_rem
 from starkware.cairo.common.registers import get_fp_and_pc
 from starkware.cairo.common.alloc import alloc
 from starkware.cairo.common.cairo_builtins import BitwiseBuiltin
@@ -81,10 +82,10 @@ func ints64_to_U256(data: IntArray) -> (res: Uint256):
     return (Uint256(0,0))
 end
 
-func ints64_to_bigint3(data: IntArray) -> (res: BigInt3):
-    # TODO
-    return (BigInt3(0,0,0))
-end
+#func ints64_to_bigint3(data: IntArray) -> (res: BigInt3):
+#    # TODO
+#    return (BigInt3(0,0,0))
+#end
 
 func bigint3_to_ints64(data: BigInt3) -> (res: felt*):
     # TODO
@@ -126,21 +127,21 @@ end
 #    return (res)
 #end
 
-func slice_arr(array: IntArray, start_pos: felt, end_pos: felt) -> (res: IntArray):
-    # TODO
-    alloc_locals
-    local elements : felt*
-    local res: IntArray = IntArray(elements=elements, word_len=0, byte_len=0)
-    return (res)
-end
+#func slice_arr(array: IntArray, start_pos: felt, end_pos: felt) -> (res: IntArray):
+#    # TODO
+#    alloc_locals
+#    local elements : felt*
+#    local res: IntArray = IntArray(elements=elements, word_len=0, byte_len=0)
+#    return (res)
+#end
 
-func concat_arr(arr_x: IntArray, arr_y: IntArray) -> (res: IntArray):
-    # TODO
-    alloc_locals
-    local elements : felt*
-    let res: IntArray = IntArray(elements=elements, word_len=0, byte_len=0)
-    return (res)
-end
+#func concat_arr(arr_x: IntArray, arr_y: IntArray) -> (res: IntArray):
+#    # TODO
+#    alloc_locals
+#    local elements : felt*
+#    let res: IntArray = IntArray(elements=elements, word_len=0, byte_len=0)
+#    return (res)
+#end
 
 
 func extract_account{range_check_ptr}(rlp_data: IntsSequence) -> (
@@ -157,7 +158,7 @@ end
 func extract_message_contents(message: IntArray) -> (
     starknet_account: IntArray, storage_root: IntArray, storage_key: IntArray):
     # TODO: Convert hex to bytes
-    let (starknet_account) = slice_arr(message, 0, 32)
+    let (starknet_account) = slice_arr(message, 56, 56+32)
     let (storage_root) = slice_arr(message, 32, 64)
     let (storage_key) = slice_arr(message, 64, 96)
     return (starknet_account, storage_root, storage_key)
@@ -222,24 +223,40 @@ func extract_verification_arguments(proof_ptr : Proof*, proof_type: felt) -> (
     ret
 end
 
+func split{range_check_ptr}(a: Uint256) -> (res: BigInt3):
+    alloc_locals
+    local base : Uint256 =  Uint256(low=2 ** 86, high=0)
+    let (n0, d0) = uint256_unsigned_div_rem(a, base)    
+    let (n1, d1) = uint256_unsigned_div_rem(n0, base)   
+    let (_, d2) = uint256_unsigned_div_rem(n1, base)    
+    local res : BigInt3 = BigInt3(d0.low, d1.low, d2.low)
+    return (res)
+end
+
 func hash_eip191_message{range_check_ptr, bitwise_ptr: BitwiseBuiltin*}(
         message: IntArray) -> (msg_hash : BigInt3):
     alloc_locals
     let (local keccak_ptr : felt*) = alloc()
     let (output) = keccak256{keccak_ptr=keccak_ptr}(message.elements, message.byte_len)
-    let (msg_hash) = felts_to_bigint3(output)
+    local output_uint : Uint256 = Uint256(low=output[0]+output[1], high=output[2]+output[3])
+    let (msg_hash) = split(output_uint)
     return (msg_hash)
 end
 
 func recover_address{range_check_ptr, bitwise_ptr: BitwiseBuiltin*}(
         msg_hash: BigInt3, R_x: BigInt3, R_y: BigInt3, s: BigInt3, v: felt) -> (address: IntArray):
     alloc_locals
-    let (public_key) = ecdsa_raw_recover(msg_hash, R_x, R_y, s, v)
-    let (elements_x) = bigint3_to_ints64(public_key.y)
-    let (elements_y) = bigint3_to_ints64(public_key.y)
-    let (elements_pubkey) = concat_arr(IntArray(elements_x, 4, 32), IntArray(elements_y, 4, 32))
+    let (public_key_ec) = ecdsa_raw_recover(msg_hash, R_x, R_y, s, v)
+    #%{
+    #    print(ids.public_key_ec.x.d0)
+    #    print(ids.public_key_ec.x.d1)
+    #    print(ids.public_key_ec.x.d2)
+    #%}
+    let (elements_x) = bigint3_to_ints64(public_key_ec.x)
+    let (elements_y) = bigint3_to_ints64(public_key_ec.y)
+    let (elements_pubkey, _) = concat_arr(elements_x, 4, elements_y, 4)
     let (local keccak_ptr : felt*) = alloc()
-    let (hash) = keccak256{keccak_ptr=keccak_ptr}(elements_pubkey.elements, 64)
+    let (hash) = keccak256{keccak_ptr=keccak_ptr}(elements_pubkey, 64)
     let (address) = slice_arr(IntArray(hash, 4, 32), 12, 32) 
     return (address)
 end
@@ -271,6 +288,7 @@ func verify_account_proof{output_ptr : felt*, range_check_ptr, bitwise_ptr: Bitw
     return ()
 end
 
+
 func verify_storage_proof{output_ptr : felt*, range_check_ptr, bitwise_ptr: BitwiseBuiltin*}(
         proof_ptr : Proof*):
     alloc_locals
@@ -281,12 +299,12 @@ func verify_storage_proof{output_ptr : felt*, range_check_ptr, bitwise_ptr: Bitw
     let s = proof_ptr.signature.s
     let v = proof_ptr.signature.v
 
-    # Extract Starknet account address, storage root, and storage key from signed message contents
-    let (starknet_account, storage_root, storage_key) = extract_message_contents(message)
-
     # Extract Ethereum account address from signed message hash and signature
     let (msg_hash) = hash_eip191_message(message)
     let (ethereum_address) = recover_address(msg_hash, R_x, R_y, s, v)
+
+    # Extract Starknet account address, storage root, and storage key from signed message contents
+    let (starknet_account, storage_root, storage_key) = extract_message_contents(message)
 
     # Verify that signed storage key matches derived trie key
     let storage_slot = proof_ptr.storage_slot
@@ -299,7 +317,7 @@ func verify_storage_proof{output_ptr : felt*, range_check_ptr, bitwise_ptr: Bitw
     let (path_) = to_ints_seq(path)
     let (local storage_value: IntsSequence) = verify_proof(path_, root_hash, proof, proof_len)
     let (storage_value_) = to_int_array(storage_value)
-    let (balance) = ints64_to_U256(storage_value_)
+    let (value) = ints64_to_U256(storage_value_)
 
     # Check that balance is nonzero
     # TODO: More granular verification 
@@ -343,6 +361,7 @@ func encode_proof() -> (proof : Proof*):
             for i in range(0, len(byte_str) // 16):
                 memory[felts + i] = int(byte_str[i*16 : (i+1) * 16], 16)
 
+        # TODO: Combine usage of IntArray and IntsSequence into single data struct
         def load_intarray(base_addr, hex_input):
             elements = segments.add()
             for j in range(0, len(hex_input) // 16 + 1):
@@ -352,17 +371,6 @@ func encode_proof() -> (proof : Proof*):
             memory[base_addr + ids.IntArray.elements] = elements
             memory[base_addr + ids.IntArray.word_len] = int(ceil(len(hex_input) / 2. / 8))
             memory[base_addr + ids.IntArray.byte_len] = int(len(hex_input) / 2)
-
-        # TODO: Combine usage of IntArray and IntsSequence into single data struct
-        def load_intseq(base_addr, hex_input):
-            elements = segments.add()
-            for j in range(0, len(hex_input) // 16 + 1):
-                hex_str = hex_input[j*16 : (j+1) * 16]
-                if len(hex_str) > 0:
-                    memory[elements + j] = int(hex_str, 16)
-            memory[base_addr + ids.IntsSequence.element] = elements
-            memory[base_addr + ids.IntsSequence.element_size_words] = int(ceil(len(hex_input) / 2. / 8))
-            memory[base_addr + ids.IntsSequence.element_size_bytes] = int(len(hex_input) / 2)
 
         def load_bigint3(base_addr, input):
             d0, d1, d2 = split(input)
@@ -386,12 +394,12 @@ func encode_proof() -> (proof : Proof*):
         # Account proof
         for i, proof in enumerate(program_input['accountProof']):
             base_addr = ids.account_proof.address_ + ids.IntsSequence.SIZE * i
-            load_intseq(base_addr, proof[2:])
+            load_intarray(base_addr, proof[2:])
 
         # Storage proof (TODO: add support for more than one proof)
         for i, proof in enumerate(program_input['storageProof'][0]['proof']):
             base_addr = ids.storage_proof0.address_ + ids.IntsSequence.SIZE * i
-            load_intseq(base_addr, proof[2:])
+            load_intarray(base_addr, proof[2:])
 
         # Signature
         load_intarray(ids.message.address_, program_input['signature']['message'][2:])
@@ -428,7 +436,7 @@ func main{output_ptr : felt*, range_check_ptr, bitwise_ptr: BitwiseBuiltin*}():
     let (local proof: Proof*) = encode_proof()
 
     let (__fp__, _) = get_fp_and_pc()
-    verify_account_proof(proof_ptr=proof)
+    #verify_account_proof(proof_ptr=proof)
     verify_storage_proof(proof_ptr=proof)
 
     ret

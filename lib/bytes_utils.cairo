@@ -8,8 +8,13 @@ struct IntArray:
     member byte_len: felt # total number of bytes
 end
 
+struct ByteArray:
+	member elements: felt*
+	member byte_len: felt
+end
 
-func swap_endian{ range_check_ptr, bitwise_ptr : BitwiseBuiltin* }(input: felt, size: felt) -> (output: felt):
+
+func swap_endian{range_check_ptr, bitwise_ptr : BitwiseBuiltin*}(input: felt, size: felt) -> (output: felt):
     alloc_locals
     let (local output : felt*) = alloc()
 
@@ -59,7 +64,7 @@ func swap_endian{ range_check_ptr, bitwise_ptr : BitwiseBuiltin* }(input: felt, 
     end
 end
 
-func pow{ range_check_ptr }(base: felt, p: felt) -> (res: felt):
+func pow{range_check_ptr}(base: felt, p: felt) -> (res: felt):
     if p == 0:
         return (1)
     end
@@ -67,7 +72,7 @@ func pow{ range_check_ptr }(base: felt, p: felt) -> (res: felt):
     return (base * accumulator)
 end
 
-func bitshift_right{ range_check_ptr }(word: felt, num_bits: felt) -> (shifted: felt):
+func bitshift_right{range_check_ptr}(word: felt, num_bits: felt) -> (shifted: felt):
     assert_le(word, 2**64 - 1) # verifies word fits in 64bits
     assert_le(num_bits, 64) # verifies shifted bits are not above 64
     
@@ -76,10 +81,47 @@ func bitshift_right{ range_check_ptr }(word: felt, num_bits: felt) -> (shifted: 
     return (left_part)
 end
 
-# TODO: Test this function when bytes is 8 and position is 0
-func slice{range_check_ptr}(word: felt, word_len_bytes: felt, position: felt) -> (res: felt):
-    #assert_le(position, (word_len_bytes*2)-1) # Ensures that the extracted nibble is not out of word range
-    let (shifted) = bitshift_right(word, (word_len_bytes*2-1) * 4 - position * 4)
-    let (_, nibble) = unsigned_div_rem(shifted, 0x10)
-    return (nibble)
+# TODO: Optimize this function
+func slice_arr(
+        arr: IntArray,
+        start: felt,
+        stop: felt) -> (res: IntArray):
+
+    alloc_locals
+	# TODO: 
+	# 1. Convert to ByteArray
+	# 2. Slice to [start, stop]
+	# 3. Convert to IntArray
+
+    #let (local acc : felt*) = alloc()
+    #slice_arr_rec(arr, arr_len, start, size)
+	
+	local elements: felt*
+	local res: IntArray = IntArray(elements, 0, 0)
+	return (res)
 end
+
+#func slice_arr_rec{range_check_ptr}(
+#        arr: felt*,
+#        arr_len: felt,
+#        start: felt,
+#        size: felt,
+#        acc: felt*,
+#        acc_len: felt,
+#        current_index: felt) -> (offset: felt):
+#
+#    if current_index == size:
+#        return (start + current_index)
+#    end
+#
+#    assert acc[current_index] = arr[start + current_index]
+#
+#    return slice_arr(
+#        start,
+#        size,
+#        arr,
+#        arr_len,
+#        acc,
+#        acc_len + 1,
+#        current_index + 1)
+#end

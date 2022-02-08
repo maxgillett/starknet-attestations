@@ -29,13 +29,13 @@ msg = "%s%s%s" % (
     STARKNET_ATTESTATION_WALLET[2:],
     state_root,
     storage_key)
-message = encode_defunct(text=msg)
+message = encode_defunct(hexstr=msg)
 signed_message = w3.eth.account.sign_message(message, private_key=PRIVATE_KEY)
 eip191_message = b'\x19' + message.version + message.header + message.body
 P = 2**256 - 4294968273
 R_x = signed_message.r
 R_y = min(sympy.ntheory.residue_ntheory.sqrt_mod(R_x**3 + 7, P, all_roots=True))
-R_y = R_y if signed_message.v == 27 else -R_y
+#R_y = R_y if signed_message.v == 27 else -R_y
 
 # Serialize proof to disk
 proof_dict = json.loads(Web3.toJSON(proof))
