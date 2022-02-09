@@ -40,7 +40,7 @@ R_y = min(sympy.ntheory.residue_ntheory.sqrt_mod(R_x**3 + 7, P, all_roots=True))
 # Serialize proof to disk
 proof_dict = json.loads(Web3.toJSON(proof))
 proof_dict['blockNumber'] = block.number
-proof_dict['stateRoot'] = block.stateRoot.hex()
+proof_dict['stateRoot'] = state_root
 proof_dict['storageSlot'] = slot
 proof_dict["signature"] = {
     "message": "0x"+eip191_message.hex(),

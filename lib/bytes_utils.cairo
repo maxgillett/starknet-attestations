@@ -81,25 +81,24 @@ func bitshift_right{range_check_ptr}(word: felt, num_bits: felt) -> (shifted: fe
     return (left_part)
 end
 
-# TODO: Optimize this function
-func slice_arr(
-        arr: IntArray,
-        start: felt,
-        stop: felt) -> (res: IntArray):
-
-    alloc_locals
-	# TODO: 
-	# 1. Convert to ByteArray
-	# 2. Slice to [start, stop]
-	# 3. Convert to IntArray
-
-    #let (local acc : felt*) = alloc()
-    #slice_arr_rec(arr, arr_len, start, size)
-	
-	local elements: felt*
-	local res: IntArray = IntArray(elements, 0, 0)
-	return (res)
-end
+#func slice_arr(
+#        arr: IntArray,
+#        start: felt,
+#        stop: felt) -> (res: IntArray):
+#
+#    alloc_locals
+#	# TODO: 
+#	# 1. Convert to ByteArray
+#	# 2. Slice to [start, stop]
+#	# 3. Convert to IntArray
+#
+#    #let (local acc : felt*) = alloc()
+#    #slice_arr_rec(arr, arr_len, start, size)
+#	
+#	local elements: felt*
+#	local res: IntArray = IntArray(elements, 0, 0)
+#	return (res)
+#end
 
 #func slice_arr_rec{range_check_ptr}(
 #        arr: felt*,
