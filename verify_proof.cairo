@@ -288,20 +288,11 @@ end
 
 
 func verify_storage_proof{output_ptr : felt*, range_check_ptr, bitwise_ptr: BitwiseBuiltin*}(
-        proof_ptr : Proof*):
+        proof_ptr : Proof*, ethereum_address : IntArray):
     alloc_locals
 
-    let message = proof_ptr.signature.message
-    let R_x = proof_ptr.signature.R_x
-    let R_y = proof_ptr.signature.R_y
-    let s = proof_ptr.signature.s
-    let v = proof_ptr.signature.v
-
-    # Extract Ethereum account address from signed message hash and signature
-    let (msg_hash) = hash_eip191_message(message)
-    let (ethereum_address) = recover_address(msg_hash, R_x, R_y, s, v)
-
     # Extract Starknet account address, storage root, and storage key from signed message contents
+    let message = proof_ptr.signature.message
     let (starknet_account, state_root, storage_key) = extract_message_contents(message)
 
     # Verify that signed storage key matches derived trie key
@@ -332,8 +323,124 @@ func verify_storage_proof{output_ptr : felt*, range_check_ptr, bitwise_ptr: Bitw
     return ()
 end
 
-# Load proof from json file
-func encode_proof() -> (proof : Proof*):
+## Proof encoding/decoding
+
+func reconstruct_int_array(input : felt*):
+    tempvar len = input[0]
+    reconstruct_int_array_(input, len)
+end
+
+func reconstruct_int_array_(input : felt*, len : felt)
+    if len == 0:
+
+    else:
+    end
+end
+
+func reconstruct_big_int3(input : felt*) -> (res: BigInt3):
+    tempvar res = BigInt3(input[0], input[1], input[2])
+    return (res)
+end
+
+func encode_proof(
+    balance : felt,
+    nonce : felt,
+    account_proof_len : felt,
+    storage_proof_len : felt,
+    address_ : felt*,
+    state_root_ : felt* ,
+    code_hash_ : felt* ,
+    storage_slot_ : felt*,
+    storage_hash_ : felt*,
+    message_ : felt*,
+    message_len : felt,
+    message_byte_len : felt,
+    R_x_ : felt*,
+    R_y_ : felt*,
+    s_ : felt*,
+    v : felt,
+    storage_key_ : felt*,
+    storage_value_ : felt*,
+    account_proofs_concat : felt*,
+    account_proofs_concat_len : felt,
+    account_proof_sizes_words : felt*,
+    account_proof_sizes_words_len : felt,
+    account_proof_sizes_bytes : felt*,
+    account_proof_sizes_bytes_len : felt,
+    storage_proofs_concat : felt*,
+    storage_proofs_concat_len : felt,
+    storage_proof_sizes_words : felt*,
+    storage_proof_sizes_words_len : felt,
+    storage_proof_sizes_bytes : felt*,
+    storage_proof_sizes_bytes_len : felt,
+) -> (proof : Proof*):
+    alloc_locals
+
+    # Reconstruct IntArray
+    tempvar address = IntArray(address_, 3, 20)
+    tempvar state_root = IntArray(state_root_, 4, 32)
+    tempvar code_hash = IntArray(code_hash_, 4, 32)
+    tempvar storage_slot = IntArray(storage_slot_, 4, 32)
+    tempvar storage_hash = IntArray(storage_hash_, 4, 32)
+    tempvar message = IntArray(message_, message_len, message_byte_len)
+    tempvar storage_key = IntArray(storage_key_, 4, 32)
+    tempvar storage_value = IntArray(storage_value_, 4, 32)
+
+    # Reconstruct BigInt3
+    let (R_x) = reconstruct_big_int3(R_x_)
+    let (R_y) = reconstruct_big_int3(R_y_)
+    let (s) = reconstruct_big_int3(s_)
+
+    # Reconstruct IntsSequence*
+    let (local account_proof_arg: IntsSequence*) = alloc()
+    let (local storage_proof_arg: IntsSequence*) = alloc()
+    reconstruct_ints_sequence_list(
+        account_proofs_concat,
+        account_proofs_concat_len,
+        account_proof_sizes_words,
+        account_proof_sizes_words_len,
+        account_proof_sizes_bytes,
+        account_proof_sizes_bytes_len,
+        account_proof_arg,
+        0,
+        0,
+        0
+    reconstruct_ints_sequence_list(
+        storage_proofs_concat,
+        storage_proofs_concat_len,
+        storage_proof_sizes_words,
+        storage_proof_sizes_words_len,
+        storage_proof_sizes_bytes,
+        storage_proof_sizes_bytes_len,
+        storage_proof_arg,
+        0,
+        0,
+        0
+
+    local storage_proof : StorageProof = StorageProof(
+        key=storage_key, value=storage_value, proof=storage_proof_arg)
+    local signature : Signature = Signature(
+        message=message, R_x=R_x, R_y=R_y, s=s, v=v)
+    local proof: Proof = Proof(
+        address=address,
+        state_root=state_root,
+        account_proof=account_proof_arg,
+        account_proof_len=account_proof_len,
+        balance=balance,
+        code_hash=code_hash,
+        nonce=nonce,
+        storage_slot=storage_slot,
+        storage_hash=storage_hash,
+        storage_proof=storage_proof,
+        storage_proof_len=storage_proof_len,
+        signature=signature)
+
+    let (__fp__, _) = get_fp_and_pc()
+    return (proof=&proof)
+
+end
+
+func encode_proof_from_json() -> (proof : Proof*):
     alloc_locals
 
     local balance : felt
@@ -348,9 +455,9 @@ func encode_proof() -> (proof : Proof*):
     local storage_hash : IntArray
 
     local message : IntArray
-    local message_hash : BigInt3
     local R_x : BigInt3
     local R_y : BigInt3
+    local s : BigInt3
     local v : felt
 
     let (account_proof : IntsSequence*) = alloc()
@@ -409,16 +516,16 @@ func encode_proof() -> (proof : Proof*):
 
         # Signature
         load_intarray(ids.message.address_, program_input['signature']['message'][2:])
-        load_bigint3(ids.message_hash.address_, int(program_input['signature']['messageHash'], 16))
         load_bigint3(ids.R_x.address_, program_input['signature']['R_x'])
         load_bigint3(ids.R_y.address_, program_input['signature']['R_y'])
+        load_bigint3(ids.s.address_, program_input['signature']['s'])
         ids.v = program_input['signature']['v']
     %}
 
     local storage_proof : StorageProof = StorageProof(
         key=storage_key, value=storage_value, proof=storage_proof0)
     local signature : Signature = Signature(
-        message=message, message_hash=message_hash, R_x=R_x, R_y=R_y, v=v)
+        message=message, R_x=R_x, R_y=R_y, s=s, v=v)
     local proof: Proof = Proof(
         address=address,
         state_root=state_root,
@@ -439,11 +546,20 @@ end
 
 func main{output_ptr : felt*, range_check_ptr, bitwise_ptr: BitwiseBuiltin*}():
     alloc_locals
-    let (local proof: Proof*) = encode_proof()
+    let (local proof: Proof*) = encode_proof_from_json()
+
+    # Extract Ethereum account address from signed message hash and signature
+    let message = proof.signature.message
+    let R_x = proof.signature.R_x
+    let R_y = proof.signature.R_y
+    let s = proof.signature.s
+    let v = proof.signature.v
+    let (msg_hash) = hash_eip191_message(message)
+    let (ethereum_address) = recover_address(msg_hash, R_x, R_y, s, v)
 
     let (__fp__, _) = get_fp_and_pc()
+    verify_storage_proof(proof_ptr=proof, ethereum_address)
     verify_account_proof(proof_ptr=proof)
-    verify_storage_proof(proof_ptr=proof)
 
     ret
 end

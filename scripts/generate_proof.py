@@ -5,7 +5,7 @@ from web3 import Web3
 from eth_account.messages import encode_defunct
 
 ERC20_TOKEN = "0xC18360217D8F7Ab5e7c516566761Ea12Ce7F9D72" # ENS token
-BLOCK_NUMBER = 14063680
+BLOCK_NUMBER = 14063681
 
 load_dotenv()
 ADDRESS = os.environ['ADDRESS']
@@ -23,11 +23,11 @@ balance = w3.eth.get_storage_at(ERC20_TOKEN, position)
 print("Generating proof of balance", Web3.toInt(balance))
 
 # Sign a message demonstrating control over the storage slot
-state_root = block.stateRoot.hex()[2:]
+state_root = block.stateRoot.hex()
 storage_key = proof['storageProof'][0]['key'].hex()[2:]
 msg = "%s%s%s" % (
     STARKNET_ATTESTATION_WALLET[2:],
-    state_root,
+    state_root[2:],
     storage_key)
 message = encode_defunct(hexstr=msg)
 signed_message = w3.eth.account.sign_message(message, private_key=PRIVATE_KEY)
@@ -35,7 +35,7 @@ eip191_message = b'\x19' + message.version + message.header + message.body
 P = 2**256 - 4294968273
 R_x = signed_message.r
 R_y = min(sympy.ntheory.residue_ntheory.sqrt_mod(R_x**3 + 7, P, all_roots=True))
-#R_y = R_y if signed_message.v == 27 else -R_y
+R_y = R_y if signed_message.v == 27 else -R_y
 
 # Serialize proof to disk
 proof_dict = json.loads(Web3.toJSON(proof))
