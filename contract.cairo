@@ -1,15 +1,15 @@
 %lang starknet
 
-from verify_proof import verify_account_proof, verify_storage_proof, hash_eip191_message, recover_address
+from verify_proof import encode_proof, verify_account_proof, verify_storage_proof, hash_eip191_message, recover_address
 
 @storage_var
-func _badges(token: felt, account: felt, chain_id: felt, balance: felt) -> (starknet_account: felt):
+func badges(token: felt, eth_account: felt, chain_id: felt, balance: felt) -> (starknet_account: felt):
 end
 
 @external
 func mint(
-    balance : felt,
-    nonce : felt,
+    starknet_account : felt,
+    token_balance_min : felt,
     account_proof_len : felt,
     storage_proof_len : felt,
     address_ : felt*,
@@ -41,8 +41,8 @@ func mint(
 ):
 
     let (local proof: Proof*) = encode_proof(
-        balance,
-        nonce,
+        0, # balance,
+        1, # nonce,
         account_proof_len,
         storage_proof_len,
         address_,
@@ -73,16 +73,19 @@ func mint(
         storage_proof_sizes_bytes_len) 
 
     # Extract Ethereum account address from signed message hash and signature
-    let message = proof_ptr.signature.message
-    let R_x = proof_ptr.signature.R_x
-    let R_y = proof_ptr.signature.R_y
-    let s = proof_ptr.signature.s
-    let v = proof_ptr.signature.v
+    let message = proof.signature.message
+    let R_x = proof.signature.R_x
+    let R_y = proof.signature.R_y
+    let s = proof.signature.s
+    let v = proof.signature.v
     let (msg_hash) = hash_eip191_message(message)
     let (ethereum_address) = recover_address(msg_hash, R_x, R_y, s, v)
 
-    verify_storage_proof(proof, ethereum_addresss)
+    verify_storage_proof(proof, ethereum_address, token_balance_min)
     verify_account_proof(proof)
 
-    _badges.write(token, account, chain_id, balance, starknet_account)
+    let eth_account = ethereum_address[1] * 2**(86*2) + 
+                      ethereum_address[2] * 2**86 + 
+                      ethereum_address[3]
+    badges.write(token, eth_account, chain_id, token_balance_min, starknet_account)
 end

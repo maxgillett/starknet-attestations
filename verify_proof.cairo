@@ -6,7 +6,7 @@ from lib.bytes_utils import IntArray, swap_endian
 from lib.storage_verification.keccak import keccak256
 from lib.storage_verification.trie_proofs import verify_proof
 from lib.storage_verification.extract_from_rlp import extract_data
-from lib.storage_verification.types import IntsSequence
+from lib.storage_verification.types import IntsSequence, reconstruct_ints_sequence_list
 from lib.storage_verification.swap_endianness import swap_endianness_four_words
 from lib.storage_verification.comp_arr import arr_eq
 from lib.storage_verification.concat_arr import concat_arr
@@ -288,7 +288,7 @@ end
 
 
 func verify_storage_proof{output_ptr : felt*, range_check_ptr, bitwise_ptr: BitwiseBuiltin*}(
-        proof_ptr : Proof*, ethereum_address : IntArray):
+        proof_ptr : Proof*, ethereum_address : IntArray, token_balance_min : felt):
     alloc_locals
 
     # Extract Starknet account address, storage root, and storage key from signed message contents
@@ -325,24 +325,12 @@ end
 
 ## Proof encoding/decoding
 
-func reconstruct_int_array(input : felt*):
-    tempvar len = input[0]
-    reconstruct_int_array_(input, len)
-end
-
-func reconstruct_int_array_(input : felt*, len : felt)
-    if len == 0:
-
-    else:
-    end
-end
-
 func reconstruct_big_int3(input : felt*) -> (res: BigInt3):
     tempvar res = BigInt3(input[0], input[1], input[2])
     return (res)
 end
 
-func encode_proof(
+func encode_proof{ range_check_ptr }(
     balance : felt,
     nonce : felt,
     account_proof_len : felt,
@@ -404,7 +392,7 @@ func encode_proof(
         account_proof_arg,
         0,
         0,
-        0
+        0)
     reconstruct_ints_sequence_list(
         storage_proofs_concat,
         storage_proofs_concat_len,
@@ -415,7 +403,7 @@ func encode_proof(
         storage_proof_arg,
         0,
         0,
-        0
+        0)
 
     local storage_proof : StorageProof = StorageProof(
         key=storage_key, value=storage_value, proof=storage_proof_arg)
@@ -470,12 +458,8 @@ func encode_proof_from_json() -> (proof : Proof*):
         from math import ceil
         from starkware.cairo.common.cairo_secp.secp_utils import split
         
-        def load_ints(felts, byte_str):
-            for i in range(0, len(byte_str) // 16):
-                memory[felts + i] = int(byte_str[i*16 : (i+1) * 16], 16)
-
         # TODO: Combine usage of IntArray and IntsSequence into single data struct
-        def load_intarray(base_addr, hex_input):
+        def pack_intarray(base_addr, hex_input):
             elements = segments.add()
             for j in range(0, len(hex_input) // 16 + 1):
                 hex_str = hex_input[j*16 : (j+1) * 16]
@@ -485,7 +469,7 @@ func encode_proof_from_json() -> (proof : Proof*):
             memory[base_addr + ids.IntArray.word_len] = int(ceil(len(hex_input) / 2. / 8))
             memory[base_addr + ids.IntArray.byte_len] = int(len(hex_input) / 2)
 
-        def load_bigint3(base_addr, input):
+        def pack_bigint3(base_addr, input):
             d0, d1, d2 = split(input)
             memory[base_addr + ids.BigInt3.d0] = d0
             memory[base_addr + ids.BigInt3.d1] = d1
@@ -496,29 +480,29 @@ func encode_proof_from_json() -> (proof : Proof*):
         ids.account_proof_len = len(program_input['accountProof'])
         ids.storage_proof_len = len(program_input['storageProof'][0]['proof'])
 
-        load_intarray(ids.address.address_, program_input['address'][2:])
-        load_intarray(ids.state_root.address_, program_input['stateRoot'][2:])
-        load_intarray(ids.code_hash.address_, program_input['codeHash'][2:])
-        load_intarray(ids.storage_slot.address_, program_input['storageSlot'][2:])
-        load_intarray(ids.storage_hash.address_, program_input['storageHash'][2:])
-        load_intarray(ids.storage_key.address_, program_input['storageProof'][0]['key'][2:])
-        load_intarray(ids.storage_value.address_, program_input['storageProof'][0]['value'][2:])
+        pack_intarray(ids.address.address_, program_input['address'][2:])
+        pack_intarray(ids.state_root.address_, program_input['stateRoot'][2:])
+        pack_intarray(ids.code_hash.address_, program_input['codeHash'][2:])
+        pack_intarray(ids.storage_slot.address_, program_input['storageSlot'][2:])
+        pack_intarray(ids.storage_hash.address_, program_input['storageHash'][2:])
+        pack_intarray(ids.storage_key.address_, program_input['storageProof'][0]['key'][2:])
+        pack_intarray(ids.storage_value.address_, program_input['storageProof'][0]['value'][2:])
 
         # Account proof
         for i, proof in enumerate(program_input['accountProof']):
             base_addr = ids.account_proof.address_ + ids.IntsSequence.SIZE * i
-            load_intarray(base_addr, proof[2:])
+            pack_intarray(base_addr, proof[2:])
 
         # Storage proof (TODO: add support for more than one proof)
         for i, proof in enumerate(program_input['storageProof'][0]['proof']):
             base_addr = ids.storage_proof0.address_ + ids.IntsSequence.SIZE * i
-            load_intarray(base_addr, proof[2:])
+            pack_intarray(base_addr, proof[2:])
 
         # Signature
-        load_intarray(ids.message.address_, program_input['signature']['message'][2:])
-        load_bigint3(ids.R_x.address_, program_input['signature']['R_x'])
-        load_bigint3(ids.R_y.address_, program_input['signature']['R_y'])
-        load_bigint3(ids.s.address_, program_input['signature']['s'])
+        pack_intarray(ids.message.address_, program_input['signature']['message'][2:])
+        pack_bigint3(ids.R_x.address_, program_input['signature']['R_x'])
+        pack_bigint3(ids.R_y.address_, program_input['signature']['R_y'])
+        pack_bigint3(ids.s.address_, program_input['signature']['s'])
         ids.v = program_input['signature']['v']
     %}
 
@@ -558,7 +542,7 @@ func main{output_ptr : felt*, range_check_ptr, bitwise_ptr: BitwiseBuiltin*}():
     let (ethereum_address) = recover_address(msg_hash, R_x, R_y, s, v)
 
     let (__fp__, _) = get_fp_and_pc()
-    verify_storage_proof(proof_ptr=proof, ethereum_address)
+    verify_storage_proof(proof_ptr=proof, ethereum_address=ethereum_address, token_balance_min=1)
     verify_account_proof(proof_ptr=proof)
 
     ret

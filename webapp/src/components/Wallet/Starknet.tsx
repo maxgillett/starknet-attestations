@@ -30,20 +30,3 @@ export default function StarknetWallet(): JSX.Element {
     );
   }
 }
-
-//export function StarknetConnected({ children }: StarknetConnectedOnlyProps): JSX.Element {
-//  const { account, connectBrowserWallet } = useStarknet();
-//
-//  if (account) {
-//    return (
-//      <div>
-//      <React.Fragment>{children}</React.Fragment>
-//      </div>
-//    );
-//  } else {
-//    return (
-//      <div>
-//      </div>
-//    );
-//  }
-//}
