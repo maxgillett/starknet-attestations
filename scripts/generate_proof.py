@@ -17,7 +17,7 @@ w3 = Web3(Web3.HTTPProvider(os.environ['RPC_HTTP']))
 slot = str(0).rjust(64, '0')
 key = ADDRESS[2:].rjust(64, '0').lower()
 position = w3.keccak(hexstr=key + slot)
-#print(Web3.toHex(position))
+print(Web3.toHex(position))
 block = w3.eth.get_block(BLOCK_NUMBER)
 proof = w3.eth.get_proof(ERC20_TOKEN, [position], BLOCK_NUMBER)
 balance = w3.eth.get_storage_at(ERC20_TOKEN, position)
@@ -37,6 +37,10 @@ P = 2**256 - 4294968273
 R_x = signed_message.r
 R_y = min(sympy.ntheory.residue_ntheory.sqrt_mod(R_x**3 + 7, P, all_roots=True))
 R_y = R_y if signed_message.v == 27 else -R_y
+
+# Debug: split message hash into BigInt3
+from starkware.cairo.common.cairo_secp.secp_utils import split
+print(split(int(signed_message.messageHash.hex(), 16))) 
 
 # Serialize proof to disk
 proof_dict = json.loads(Web3.toJSON(proof))

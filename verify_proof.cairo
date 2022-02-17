@@ -14,7 +14,7 @@ from lib.storage_verification.concat_arr import concat_arr
 from lib.secp.secp import ecdsa_raw_recover
 from lib.secp.bigint import BigInt3
 
-from starkware.cairo.common.uint256 import Uint256, uint256_lt, uint256_unsigned_div_rem, uint256_mul, uint256_add
+from starkware.cairo.common.uint256 import Uint256, uint256_lt, uint256_unsigned_div_rem, uint256_mul, uint256_add, split_64
 from starkware.cairo.common.registers import get_fp_and_pc
 from starkware.cairo.common.bitwise import bitwise_and
 from starkware.cairo.common.alloc import alloc
@@ -95,20 +95,18 @@ func pack_uint64{range_check_ptr}(n: BigInt3) -> (res: felt*):
     let (d, _) = uint256_add(a, b)
     let (e, _) = uint256_add(d, c)
     let (local res : felt*) = alloc()
-    let (q0, r0) = unsigned_div_rem(e.low, 2**64) 
-    let (q1, r1) = unsigned_div_rem(q0, 2**64) 
-    let (q2, r2) = unsigned_div_rem(e.high, 2**64) 
-    let (q3, r3) = unsigned_div_rem(q2, 2**64) 
-    assert res[0] = r0
-    assert res[1] = r1
-    assert res[2] = r2
-    assert res[3] = r3
+    let (r0, r1) = split_64(e.low)
+    let (r2, r3) = split_64(e.high)
+    assert res[0] = r3
+    assert res[1] = r2
+    assert res[2] = r1
+    assert res[3] = r0
     return (res)
 end
 
-func ints64_to_U256(a: felt*) -> (res: Uint256):
+func int_array_to_U256(a: felt*) -> (res: Uint256):
     # TODO
-    return (Uint256(0,0))
+    return (Uint256(a[0],0))
 end
 
 
@@ -176,24 +174,16 @@ func encode_kv_position{range_check_ptr, bitwise_ptr: BitwiseBuiltin*}(
     let (input : felt*) = alloc()
 
     # Address
-    let (local input0) = swap_endian(address.elements[0], 8)
-    assert input[0] = input0 
-    let (local input1) = swap_endian(address.elements[1], 8)
-    assert input[1] = input1
-    let (local input2) = swap_endian(address.elements[2], 8)
-    assert input[2] = input2
-    let (local input3) = swap_endian(address.elements[3], 8)
-    assert input[3] = input3
+    assert input[0] = address.elements[0]
+    assert input[1] = address.elements[1]
+    assert input[2] = address.elements[2]
+    assert input[3] = address.elements[3]
 
     # Storage slot
-    let (local input0) = swap_endian(slot.elements[0], 8)
-    assert input[4] = input0 
-    let (local input1) = swap_endian(slot.elements[1], 8)
-    assert input[5] = input1
-    let (local input2) = swap_endian(slot.elements[2], 8)
-    assert input[6] = input2    
-    let (local input3) = swap_endian(slot.elements[3], 8)
-    assert input[7] = input3
+    assert input[4] = slot.elements[0]
+    assert input[5] = slot.elements[1]
+    assert input[6] = slot.elements[2]    
+    assert input[7] = slot.elements[3]
 
     let (local keccak_ptr : felt*) = alloc()
     let (out_le) = keccak256{keccak_ptr=keccak_ptr}(input, 64)
@@ -229,7 +219,16 @@ func hash_eip191_message{range_check_ptr, bitwise_ptr: BitwiseBuiltin*}(
     let (output_le) = keccak256{keccak_ptr=keccak_ptr}(message.elements, message.byte_len)
     let (output_be) = swap_endianness_four_words(IntsSequence(output_le, 4, 32))
     local output : felt* = output_be.element
-    local output_uint : Uint256 = Uint256(low=output[0]+output[1], high=output[2]+output[3])
+    #%{
+    #    print(''.join(v.to_bytes(8, 'big').hex() for v in memory.get_range(ids.output, 4)))
+    #%}
+    local output_uint : Uint256 = Uint256(
+        low=output[2]*2**64 + output[3],
+        high=output[0]*2**64 + output[1])
+    #%{
+    #    print(ids.output_uint.low)
+    #    print(ids.output_uint.high)
+    #%}
     let (msg_hash) = split(output_uint)
     return (msg_hash)
 end
@@ -238,9 +237,25 @@ func recover_address{range_check_ptr, bitwise_ptr: BitwiseBuiltin*}(
         msg_hash: BigInt3, R_x: BigInt3, R_y: BigInt3, s: BigInt3, v: felt) -> (address: IntArray):
     alloc_locals
     let (public_key_ec) = ecdsa_raw_recover(msg_hash, R_x, R_y, s, v)
+    #%{
+    #    print("x", hex(pack(ids.public_key_ec.x, PRIME)))
+    #    print("y", hex(pack(ids.public_key_ec.y, PRIME)))
+    #%}
     let (elements_x) = pack_uint64(public_key_ec.x)
+    #%{
+    #    output = ''.join(v.to_bytes(8, 'big').hex() for v in memory.get_range(ids.elements_x, 4))
+    #    print(output)
+    #%}
     let (elements_y) = pack_uint64(public_key_ec.y)
+    #%{
+    #    output = ''.join(v.to_bytes(8, 'big').hex() for v in memory.get_range(ids.elements_y, 4))
+    #    print(output)
+    #%}
     let (elements_pubkey, _) = concat_arr(elements_x, 4, elements_y, 4)
+    #%{
+    #    output = ''.join(v.to_bytes(8, 'big').hex() for v in memory.get_range(ids.elements_pubkey, 8))
+    #    print(output)
+    #%}
     let (local keccak_ptr : felt*) = alloc()
     let (hash_le) = keccak256{keccak_ptr=keccak_ptr}(elements_pubkey, 64)
     let (hash_be) = swap_endianness_four_words(IntsSequence(hash_le, 4, 32))
@@ -252,10 +267,10 @@ func recover_address{range_check_ptr, bitwise_ptr: BitwiseBuiltin*}(
     assert elements[2] = hash[2]
     assert elements[3] = hash[3]
     local address : IntArray = IntArray(elements, 4, 32)
-    %{
-        output = ''.join(v.to_bytes(8, 'big').hex() for v in memory.get_range(ids.address.elements, 4))
-        print(output)
-    %}
+    #%{
+    #    output = ''.join(v.to_bytes(8, 'big').hex() for v in memory.get_range(ids.address.elements, 4))
+    #    print(output)
+    #%}
     return (address)
 end
 
@@ -308,7 +323,8 @@ func verify_storage_proof{output_ptr : felt*, range_check_ptr, bitwise_ptr: Bitw
     # Retrieve RLP encoded storage value from proof
     let (root_hash, proof, proof_len) = extract_verification_arguments(proof_ptr, STORAGE)
     let (local storage_value: IntsSequence) = verify_proof(path, root_hash, proof, proof_len)
-    let (balance) = ints64_to_U256(storage_value.element)
+    # We assume that balance is less than the native prime 
+    let (balance) = int_array_to_U256(storage_value.element)
 
     # Compare root hash to signed state root
     let (local state_root_match: felt) = arr_eq(
@@ -539,6 +555,13 @@ func main{output_ptr : felt*, range_check_ptr, bitwise_ptr: BitwiseBuiltin*}():
     let s = proof.signature.s
     let v = proof.signature.v
     let (msg_hash) = hash_eip191_message(message)
+    #%{
+    #    from starkware.cairo.common.cairo_secp.secp_utils import pack
+    #    print(ids.msg_hash.d0)
+    #    print(ids.msg_hash.d1)
+    #    print(ids.msg_hash.d2)
+    #    print(hex(pack(ids.msg_hash, PRIME)))
+    #%}
     let (ethereum_address) = recover_address(msg_hash, R_x, R_y, s, v)
 
     let (__fp__, _) = get_fp_and_pc()
