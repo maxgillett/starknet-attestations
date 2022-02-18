@@ -26,7 +26,8 @@ print("Generating proof of balance", Web3.toInt(balance))
 # Sign a message demonstrating control over the storage slot
 state_root = block.stateRoot.hex()
 storage_key = proof['storageProof'][0]['key'].hex()[2:]
-msg = "%s%s%s" % (
+#storage_key = "0xcfb69d636974cd3ad6b1a94ba287e4d6c866a2e4bcc651b4b482b0598d10506b"[2:]
+msg = "000000%s%s%s00000000" % ( # Pad the message with zeros to align 64bit word size in Cairo
     STARKNET_ATTESTATION_WALLET[2:],
     state_root[2:],
     storage_key)
@@ -36,11 +37,24 @@ eip191_message = b'\x19' + message.version + message.header + message.body
 P = 2**256 - 4294968273
 R_x = signed_message.r
 R_y = min(sympy.ntheory.residue_ntheory.sqrt_mod(R_x**3 + 7, P, all_roots=True))
-R_y = R_y if signed_message.v == 27 else -R_y
+#R_y = R_y if signed_message.v == 27 else -R_y
+
+# Debug: split message into 64bit uints
+def pack_intarray(hex_input):
+    elements = []
+    for j in range(0, len(hex_input) // 16 + 1):
+        hex_str = hex_input[j*16:(j+1)*16]
+        if len(hex_str) > 0:
+            elements.append(int(hex_str, 16))
+    return elements
+print(message.body.hex()[6:])
+print(eip191_message.hex())
+print(pack_intarray(message.body.hex()[6:]))
+print(pack_intarray(eip191_message.hex()[:])[4:]) # Skip the first 4 words
 
 # Debug: split message hash into BigInt3
-from starkware.cairo.common.cairo_secp.secp_utils import split
-print(split(int(signed_message.messageHash.hex(), 16))) 
+#from starkware.cairo.common.cairo_secp.secp_utils import split
+#print(split(int(signed_message.messageHash.hex(), 16))) 
 
 # Serialize proof to disk
 proof_dict = json.loads(Web3.toJSON(proof))

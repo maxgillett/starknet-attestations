@@ -1,4 +1,4 @@
-%builtins output range_check bitwise
+%builtins range_check bitwise
 
 from lib.keccak import keccak, finalize_keccak
 from lib.bytes_utils import IntArray, swap_endian
@@ -104,22 +104,23 @@ func pack_uint64{range_check_ptr}(n: BigInt3) -> (res: felt*):
     return (res)
 end
 
-func int_array_to_U256(a: felt*) -> (res: Uint256):
-    # TODO
-    return (Uint256(a[0],0))
+func int_array_to_U256(a: felt*, word_len: felt) -> (res: Uint256):
+    # TODO: Turn into recursive function
+    if word_len == 1:
+        return (Uint256(a[0],0))
+    end
+    if word_len == 2:
+        return (Uint256(a[1]+a[0]*2**64,0))
+    end
+    return (Uint256(0,0))
+end
+
+func int_array_to_address_felt(a: felt*) -> (res: felt):
+    return (a[3] + a[2]*2**64 + a[1]*2**128 + a[0]*2**192)
 end
 
 
 ## Array manipulation
-
-func to_int_array(ints_seq: IntsSequence) -> (res: IntArray):
-    let res = IntArray(
-        elements=ints_seq.element,
-        byte_len=ints_seq.element_size_bytes,
-        word_len=ints_seq.element_size_words
-    )
-    return (res)
-end
 
 func to_ints_seq(int_array: IntArray) -> (res: IntsSequence):
     let res = IntsSequence(
@@ -130,20 +131,17 @@ func to_ints_seq(int_array: IntArray) -> (res: IntsSequence):
     return (res)
 end
 
+# Slice to four 64 bit words, beginning from start_pos
 func slice_arr(
-        array: IntArray,
-        start_pos: felt,
-        end_pos: felt) -> (res: IntArray):
+        array: felt*,
+        start_pos: felt) -> (res: IntArray):
 	# TODO: 
-	# 1. Convert to ByteArray
-	# 2. Slice to [start, stop]
-	# 3. Convert to IntArray
     alloc_locals
     let (elements : felt*) = alloc()
-    assert elements[0] = 0
-    assert elements[1] = 0
-    assert elements[2] = 0
-    assert elements[3] = 0
+    assert elements[0] = array[start_pos]
+    assert elements[1] = array[start_pos + 1]
+    assert elements[2] = array[start_pos + 2]
+    assert elements[3] = array[start_pos + 3]
     local res: IntArray = IntArray(elements=elements, word_len=4, byte_len=32)
     return (res)
 end
@@ -160,11 +158,11 @@ func extract_account{range_check_ptr}(rlp_data: IntsSequence) -> (
 end
 
 func extract_message_contents(message: IntArray) -> (
-    starknet_account: IntArray, storage_root: IntArray, storage_key: IntArray):
-    # TODO: Convert hex to bytes
-    let (starknet_account) = slice_arr(message, 56, 56+32)
-    let (storage_root) = slice_arr(message, 32, 64)
-    let (storage_key) = slice_arr(message, 64, 96)
+    starknet_account: felt, storage_root: IntArray, storage_key: IntArray):
+    alloc_locals
+    let (starknet_account) = int_array_to_address_felt(message.elements + 4)
+    let (storage_root) = slice_arr(message.elements, 8)
+    let (storage_key) = slice_arr(message.elements, 12)
     return (starknet_account, storage_root, storage_key)
 end
 
@@ -219,16 +217,9 @@ func hash_eip191_message{range_check_ptr, bitwise_ptr: BitwiseBuiltin*}(
     let (output_le) = keccak256{keccak_ptr=keccak_ptr}(message.elements, message.byte_len)
     let (output_be) = swap_endianness_four_words(IntsSequence(output_le, 4, 32))
     local output : felt* = output_be.element
-    #%{
-    #    print(''.join(v.to_bytes(8, 'big').hex() for v in memory.get_range(ids.output, 4)))
-    #%}
     local output_uint : Uint256 = Uint256(
         low=output[2]*2**64 + output[3],
         high=output[0]*2**64 + output[1])
-    #%{
-    #    print(ids.output_uint.low)
-    #    print(ids.output_uint.high)
-    #%}
     let (msg_hash) = split(output_uint)
     return (msg_hash)
 end
@@ -237,25 +228,9 @@ func recover_address{range_check_ptr, bitwise_ptr: BitwiseBuiltin*}(
         msg_hash: BigInt3, R_x: BigInt3, R_y: BigInt3, s: BigInt3, v: felt) -> (address: IntArray):
     alloc_locals
     let (public_key_ec) = ecdsa_raw_recover(msg_hash, R_x, R_y, s, v)
-    #%{
-    #    print("x", hex(pack(ids.public_key_ec.x, PRIME)))
-    #    print("y", hex(pack(ids.public_key_ec.y, PRIME)))
-    #%}
     let (elements_x) = pack_uint64(public_key_ec.x)
-    #%{
-    #    output = ''.join(v.to_bytes(8, 'big').hex() for v in memory.get_range(ids.elements_x, 4))
-    #    print(output)
-    #%}
     let (elements_y) = pack_uint64(public_key_ec.y)
-    #%{
-    #    output = ''.join(v.to_bytes(8, 'big').hex() for v in memory.get_range(ids.elements_y, 4))
-    #    print(output)
-    #%}
     let (elements_pubkey, _) = concat_arr(elements_x, 4, elements_y, 4)
-    #%{
-    #    output = ''.join(v.to_bytes(8, 'big').hex() for v in memory.get_range(ids.elements_pubkey, 8))
-    #    print(output)
-    #%}
     let (local keccak_ptr : felt*) = alloc()
     let (hash_le) = keccak256{keccak_ptr=keccak_ptr}(elements_pubkey, 64)
     let (hash_be) = swap_endianness_four_words(IntsSequence(hash_le, 4, 32))
@@ -267,14 +242,10 @@ func recover_address{range_check_ptr, bitwise_ptr: BitwiseBuiltin*}(
     assert elements[2] = hash[2]
     assert elements[3] = hash[3]
     local address : IntArray = IntArray(elements, 4, 32)
-    #%{
-    #    output = ''.join(v.to_bytes(8, 'big').hex() for v in memory.get_range(ids.address.elements, 4))
-    #    print(output)
-    #%}
     return (address)
 end
 
-func verify_account_proof{output_ptr : felt*, range_check_ptr, bitwise_ptr: BitwiseBuiltin*}(
+func verify_account_proof{range_check_ptr, bitwise_ptr: BitwiseBuiltin*}(
         proof_ptr : Proof*):
     alloc_locals
 
@@ -302,13 +273,20 @@ func verify_account_proof{output_ptr : felt*, range_check_ptr, bitwise_ptr: Bitw
 end
 
 
-func verify_storage_proof{output_ptr : felt*, range_check_ptr, bitwise_ptr: BitwiseBuiltin*}(
-        proof_ptr : Proof*, ethereum_address : IntArray, token_balance_min : felt):
+func verify_storage_proof{range_check_ptr, bitwise_ptr: BitwiseBuiltin*}(
+        proof_ptr : Proof*,
+        starknet_address : felt,
+        ethereum_address : IntArray,
+        token_balance_min : Uint256):
     alloc_locals
 
+    # TODO: include storage_hash in signed message contents
     # Extract Starknet account address, storage root, and storage key from signed message contents
     let message = proof_ptr.signature.message
     let (starknet_account, state_root, storage_key) = extract_message_contents(message)
+
+    # Verify starknet address in signed message
+    assert starknet_account = starknet_address
 
     # Verify that signed storage key matches derived trie key
     let storage_slot = proof_ptr.storage_slot
@@ -322,24 +300,25 @@ func verify_storage_proof{output_ptr : felt*, range_check_ptr, bitwise_ptr: Bitw
 
     # Retrieve RLP encoded storage value from proof
     let (root_hash, proof, proof_len) = extract_verification_arguments(proof_ptr, STORAGE)
-    let (local storage_value: IntsSequence) = verify_proof(path, root_hash, proof, proof_len)
-    # We assume that balance is less than the native prime 
-    let (balance) = int_array_to_U256(storage_value.element)
+    let (local keccak_ptr : felt*) = alloc()
+    let (path_hash_le) = keccak256{keccak_ptr=keccak_ptr}(path.element, 32)
+    let (path_hash_be) = swap_endianness_four_words(IntsSequence(path_hash_le, 4, 32))
+    let (local storage_value: IntsSequence) = verify_proof(path_hash_be, root_hash, proof, proof_len)
 
-    # Compare root hash to signed state root
-    let (local state_root_match: felt) = arr_eq(
-        root_hash.element, root_hash.element_size_words,
-        state_root.elements, state_root.word_len)
-    assert state_root_match = 1
+    ## TODO: Compare root hash to signed storage hash
+    #let (local storage_hash_match: felt) = arr_eq(
+    #    root_hash.element, root_hash.element_size_words,
+    #    storage_hash.elements, storage_hash.word_len)
+    #assert storage_hash_match = 1
 
-    # Check that balance is nonzero
-    # TODO: More granular verification 
-    uint256_lt(Uint256(0,0), balance)
+    # Check that balance in storage > minimum
+    let (balance) = int_array_to_U256(storage_value.element, storage_value.element_size_words)
+    uint256_lt(token_balance_min, balance)
 
     return ()
 end
 
-## Proof encoding/decoding
+## Proof encoding / decoding
 
 func reconstruct_big_int3(input : felt*) -> (res: BigInt3):
     tempvar res = BigInt3(input[0], input[1], input[2])
@@ -544,7 +523,7 @@ func encode_proof_from_json() -> (proof : Proof*):
     return (proof=&proof)
 end
 
-func main{output_ptr : felt*, range_check_ptr, bitwise_ptr: BitwiseBuiltin*}():
+func main{range_check_ptr, bitwise_ptr: BitwiseBuiltin*}():
     alloc_locals
     let (local proof: Proof*) = encode_proof_from_json()
 
@@ -555,18 +534,18 @@ func main{output_ptr : felt*, range_check_ptr, bitwise_ptr: BitwiseBuiltin*}():
     let s = proof.signature.s
     let v = proof.signature.v
     let (msg_hash) = hash_eip191_message(message)
-    #%{
-    #    from starkware.cairo.common.cairo_secp.secp_utils import pack
-    #    print(ids.msg_hash.d0)
-    #    print(ids.msg_hash.d1)
-    #    print(ids.msg_hash.d2)
-    #    print(hex(pack(ids.msg_hash, PRIME)))
-    #%}
     let (ethereum_address) = recover_address(msg_hash, R_x, R_y, s, v)
 
     let (__fp__, _) = get_fp_and_pc()
-    verify_storage_proof(proof_ptr=proof, ethereum_address=ethereum_address, token_balance_min=1)
-    verify_account_proof(proof_ptr=proof)
+
+    # TODO: Don't use hardcoded starknet address: derive it from the from message contents
+    verify_storage_proof(
+        proof_ptr=proof,
+        starknet_address=771538670234731448218623750366387240834881445854004942938582793722421816741,
+        ethereum_address=ethereum_address,
+        token_balance_min=Uint256(1,0))
+    verify_account_proof(
+        proof_ptr=proof)
 
     ret
 end

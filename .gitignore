@@ -3,3 +3,4 @@
 *.sw*
 proof.json
 verify_proof_compiled.json
+contract.json
