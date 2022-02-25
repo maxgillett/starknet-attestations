@@ -6,6 +6,18 @@ from starkware.cairo.common.uint256 import Uint256
 
 from verify_proof import Proof, encode_proof, verify_account_proof, verify_storage_proof, hash_eip191_message, recover_address
 
+@event
+func mint_called(
+    token: felt,
+    eth_account: felt,
+    chain_id: felt,
+    block_number: felt,
+    state_root_lo: felt,
+    storage_hash_lo: felt,
+    balance: felt,
+    starknet_account: felt):
+end
+
 @storage_var
 func badges(
     token: felt,
@@ -21,6 +33,7 @@ end
 func mint{
         syscall_ptr : felt*,
         range_check_ptr,
+        pedersen_ptr: HashBuiltin*,
         bitwise_ptr: BitwiseBuiltin*}(
     starknet_account : felt,
     token_balance_min : felt,
@@ -123,8 +136,17 @@ func mint{
                         state_root_[3]
     let storage_hash_lo = storage_hash_[2] * 2**86 + 
                           storage_hash_[3]
-
     badges.write(
+        token,
+        eth_account,
+        chain_id,
+        block_number,
+        state_root_lo,
+        storage_hash_lo,
+        token_balance_min,
+        starknet_account)
+
+    mint_called.emit(
         token,
         eth_account,
         chain_id,

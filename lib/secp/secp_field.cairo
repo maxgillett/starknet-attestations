@@ -80,7 +80,9 @@ func is_zero{range_check_ptr}(x : BigInt3) -> (res : felt):
         from starkware.cairo.common.cairo_secp.secp_utils import SECP_P, pack
         x = pack(ids.x, PRIME) % SECP_P
     %}
-    if nondet %{ x == 0 %} != 0:
+    %{ memory[ap] = int(x == 0) %}
+    tempvar x_is_zero
+    if x_is_zero != 0:
         verify_zero(UnreducedBigInt3(d0=x.d0, d1=x.d1, d2=x.d2))
         return (res=1)
     end

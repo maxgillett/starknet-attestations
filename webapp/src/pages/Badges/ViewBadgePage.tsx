@@ -3,7 +3,7 @@ import React from "react"
 const ViewBadgePage = () => {
     return (
       <div>
-        I'm viewing...
+        Viewing badges is not yet supported.
       </div>
     )
 }

@@ -3,12 +3,13 @@ import { Contract, Abi } from "starknet";
 import { useStarknet } from "../providers/StarknetProvider";
 import { sha3Raw, stripHexPrefix, toHex, padLeft, toBN } from "web3-utils"
 import { utils } from "ethers"
+import { secp256k1 } from "@zoltu/ethereum-crypto"
 import * as BN from "bn.js";
 
 import MINTER from "./abi/minter.json";
 
 const ADDRESS =
-  "0x036486801b8f42e950824cba55b2df8cccb0af2497992f807a7e1d9abd2c6ba1";
+  "0x0411fd5f3e4916e02083304d4983c42d10d96027816609f7b77a5f3b3e1958c0";
 
 export function useMinterContract(): Contract | undefined {
   const { library } = useStarknet();
@@ -58,14 +59,15 @@ function encodeProof(proof: Array<string>) {
 
   return [
     flatProof,
-    flatProofSizesBytes,
     flatProofSizesWords,
+    flatProofSizesBytes,
   ]
 }
 
 // Encode call arguments for the "mint" method of the Minter contract
 export async function encodeCallArgs(
   provider: any,
+  chainId: number,
   ethAccount: string,
   starknetAccount_: string,
   token: string,
@@ -76,34 +78,39 @@ export async function encodeCallArgs(
   const number = "0x"+blockNumber.toString(16)
   const block = await provider?.send("eth_getBlockByNumber", [number, false]);
 
-  // Get storage key
+  // Prepare message attestation contents
   let pos = padLeft(stripHexPrefix(ethAccount.toLowerCase()), 64)
   pos += padLeft(stripHexPrefix(toHex(storageSlot)), 64)
   const storageKey = sha3Raw("0x"+pos)
+  const starknetAccount = stripHexPrefix(starknetAccount_);
+  const stateRoot = stripHexPrefix(block.stateRoot);
 
-  // Sign and encode attestation message
-  const starknetAccount = packInts64(stripHexPrefix(starknetAccount_));
-  const stateRoot = packInts64(stripHexPrefix(block.stateRoot));
-  const packedStorageKey = packInts64(storageKey);
-
-  const message = "0xdeadbeef";
-  const packedMessage = packInts64(message);
-  const rawSignature = await provider?.getSigner().signMessage(message);
+  // Sign attestation message
+  const message = starknetAccount + stateRoot + stripHexPrefix(storageKey);
+  const paddedMessage = "000000" + message + "00000000";
+  let packedMessage : Array<BN> = [
+    toBN("1820989616068650357"),
+    toBN("7863376661560845668"),
+    toBN("2327628128951822181"),
+    toBN("4182209287050756096")];
+  packedMessage.push(...packInts64(paddedMessage));
+  const rawSignature = await provider?.getSigner().signMessage(paddedMessage);
   const signature = utils.splitSignature(rawSignature);
 
-  // TODO
-  const R_y = packBigInt3(signature.r);
+  // Derive the y-coordinate of the elliptic curve point
+  const Rx = BigInt("0x"+toBN(signature.r).toJSON());
+  const recoveryParam : 0|1 = signature.recoveryParam === 0 ? 0 : 1;
+  const Ry = secp256k1.decompressPoint(Rx, recoveryParam);
+  console.log("Rx", Rx);
+  console.log("Ry", Ry);
 
-  // Request proof
+  // Request storage state proof
   const proof = await provider?.send("eth_getProof", [
       token, 
       [storageKey], 
       number]);
   const accountProof = proof.accountProof;
   const storageProof = proof.storageProof[0];
-  console.log(proof);
-
-  // Encode proofs
   const [
     accountProofsConcat,
     accountProofSizesWords,
@@ -112,40 +119,65 @@ export async function encodeCallArgs(
     storageProofsConcat,
     storageProofSizesWords,
     storageProofSizesBytes] = encodeProof(storageProof.proof);
+  console.log(proof);
+
+  console.log(toBN(starknetAccount_))
+  console.log(toBN(balance))
+  console.log(1) // chain id
+  console.log(blockNumber) 
+  console.log(accountProof.length)
+  console.log(storageProof.proof.length)
+  console.log(packInts64(stripHexPrefix(token))) // address
+  console.log(packInts64(stripHexPrefix(block.stateRoot)))
+  console.log(packInts64(stripHexPrefix(proof.codeHash)))
+  console.log(packInts64(padLeft(stripHexPrefix(toHex(storageSlot)), 64)))
+  console.log(packBigInt3(stripHexPrefix(proof.storageHash)))
+  // Signed state signature
+  console.log(packedMessage)
+  console.log(132) // message_byte_len
+  console.log(packBigInt3(stripHexPrefix(Rx.toString())))
+  console.log(packBigInt3(stripHexPrefix(Ry.toString())))
+  console.log(packBigInt3(stripHexPrefix(signature.s)))
+  console.log(signature.recoveryParam + 27)
+  console.log(packInts64(stripHexPrefix(storageProof.key)))
+  console.log(packInts64(stripHexPrefix(storageProof.value)))
+  // Account proof
+  console.log(accountProofsConcat)
+  console.log(accountProofSizesWords)
+  console.log(accountProofSizesBytes)
+  // Storage proof
+  console.log(storageProofsConcat)
+  console.log(storageProofSizesWords)
+  console.log(storageProofSizesBytes)
   
   return [
     toBN(starknetAccount_),
     toBN(balance),
+    1, // chain id
+    blockNumber, 
     accountProof.length,
     storageProof.proof.length,
     packInts64(stripHexPrefix(token)), // address
-    stateRoot,
+    packInts64(stripHexPrefix(block.stateRoot)),
     packInts64(stripHexPrefix(proof.codeHash)),
     packInts64(padLeft(stripHexPrefix(toHex(storageSlot)), 64)),
     packBigInt3(stripHexPrefix(proof.storageHash)),
     // Signed state signature
     packedMessage,
-    packedMessage.length,
-    message.length/2,
-    packBigInt3(signature.r),
-    R_y,
-    packBigInt3(signature.s),
+    132, // message_byte_len
+    packBigInt3(stripHexPrefix(Rx.toString())),
+    packBigInt3(stripHexPrefix(Ry.toString())),
+    packBigInt3(stripHexPrefix(signature.s)),
     signature.recoveryParam + 27,
     packInts64(stripHexPrefix(storageProof.key)),
     packInts64(stripHexPrefix(storageProof.value)),
     // Account proof
     accountProofsConcat,
-    accountProofsConcat.length,
     accountProofSizesWords,
-    accountProofSizesWords.length,
     accountProofSizesBytes,
-    accountProofSizesBytes.length,
     // Storage proof
     storageProofsConcat,
-    storageProofsConcat.length,
     storageProofSizesWords,
-    storageProofSizesWords.length,
     storageProofSizesBytes,
-    storageProofSizesBytes.length,
   ];
 }

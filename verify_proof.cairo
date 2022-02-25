@@ -1,8 +1,16 @@
-%builtins range_check bitwise
+%lang starknet
 
+# TODO: Getting an error "Unexpected implicit argument 'pedersen_ptr' in an external function" 
+# unless we declare this as a Starknet contract. Doing so now prevents us from running locally
+# using cairo-compile and cairo-run. Is the solution to pass pedersen_ptr (and any other implicit
+# arguments) to every function in this module?
+#%builtins range_check bitwise 
+
+# Keccak code from https://github.com/starkware-libs/cairo-examples/tree/master/keccak
 from lib.keccak import keccak, finalize_keccak
 from lib.bytes_utils import IntArray, swap_endian
 
+# Storage verification code from https://github.com/OilerNetwork/fossil
 from lib.storage_verification.keccak import keccak256
 from lib.storage_verification.trie_proofs import verify_proof
 from lib.storage_verification.extract_from_rlp import extract_data
@@ -11,6 +19,7 @@ from lib.storage_verification.swap_endianness import swap_endianness_four_words
 from lib.storage_verification.comp_arr import arr_eq
 from lib.storage_verification.concat_arr import concat_arr
 
+# Secp code modified from https://github.com/starkware-libs/cairo-examples/tree/master/secp
 from lib.secp.secp import ecdsa_raw_recover
 from lib.secp.bigint import BigInt3
 

@@ -1,46 +1,216 @@
 [
-  {
-    "inputs": [
-      {
-        "name": "amount",
-        "type": "felt"
-      }
-    ],
-    "name": "incrementCounter",
-    "outputs": [
-      {
-        "name": "prev_count",
-        "type": "felt"
-      },
-      {
-        "name": "new_count",
-        "type": "felt"
-      }
-    ],
-    "type": "function"
-  },
-  {
-    "inputs": [],
-    "name": "counter",
-    "outputs": [
-      {
-        "name": "count",
-        "type": "felt"
-      }
-    ],
-    "stateMutability": "view",
-    "type": "function"
-  },
-  {
-    "inputs": [],
-    "name": "lastCaller",
-    "outputs": [
-      {
-        "name": "address",
-        "type": "felt"
-      }
-    ],
-    "stateMutability": "view",
-    "type": "function"
-  }
+    {
+        "data": [
+            {
+                "name": "token",
+                "type": "felt"
+            },
+            {
+                "name": "eth_account",
+                "type": "felt"
+            },
+            {
+                "name": "chain_id",
+                "type": "felt"
+            },
+            {
+                "name": "block_number",
+                "type": "felt"
+            },
+            {
+                "name": "state_root_lo",
+                "type": "felt"
+            },
+            {
+                "name": "storage_hash_lo",
+                "type": "felt"
+            },
+            {
+                "name": "balance",
+                "type": "felt"
+            },
+            {
+                "name": "starknet_account",
+                "type": "felt"
+            }
+        ],
+        "keys": [],
+        "name": "mint_called",
+        "type": "event"
+    },
+    {
+        "inputs": [
+            {
+                "name": "starknet_account",
+                "type": "felt"
+            },
+            {
+                "name": "token_balance_min",
+                "type": "felt"
+            },
+            {
+                "name": "chain_id",
+                "type": "felt"
+            },
+            {
+                "name": "block_number",
+                "type": "felt"
+            },
+            {
+                "name": "account_proof_len",
+                "type": "felt"
+            },
+            {
+                "name": "storage_proof_len",
+                "type": "felt"
+            },
+            {
+                "name": "address__len",
+                "type": "felt"
+            },
+            {
+                "name": "address_",
+                "type": "felt*"
+            },
+            {
+                "name": "state_root__len",
+                "type": "felt"
+            },
+            {
+                "name": "state_root_",
+                "type": "felt*"
+            },
+            {
+                "name": "code_hash__len",
+                "type": "felt"
+            },
+            {
+                "name": "code_hash_",
+                "type": "felt*"
+            },
+            {
+                "name": "storage_slot__len",
+                "type": "felt"
+            },
+            {
+                "name": "storage_slot_",
+                "type": "felt*"
+            },
+            {
+                "name": "storage_hash__len",
+                "type": "felt"
+            },
+            {
+                "name": "storage_hash_",
+                "type": "felt*"
+            },
+            {
+                "name": "message__len",
+                "type": "felt"
+            },
+            {
+                "name": "message_",
+                "type": "felt*"
+            },
+            {
+                "name": "message_byte_len",
+                "type": "felt"
+            },
+            {
+                "name": "R_x__len",
+                "type": "felt"
+            },
+            {
+                "name": "R_x_",
+                "type": "felt*"
+            },
+            {
+                "name": "R_y__len",
+                "type": "felt"
+            },
+            {
+                "name": "R_y_",
+                "type": "felt*"
+            },
+            {
+                "name": "s__len",
+                "type": "felt"
+            },
+            {
+                "name": "s_",
+                "type": "felt*"
+            },
+            {
+                "name": "v",
+                "type": "felt"
+            },
+            {
+                "name": "storage_key__len",
+                "type": "felt"
+            },
+            {
+                "name": "storage_key_",
+                "type": "felt*"
+            },
+            {
+                "name": "storage_value__len",
+                "type": "felt"
+            },
+            {
+                "name": "storage_value_",
+                "type": "felt*"
+            },
+            {
+                "name": "account_proofs_concat_len",
+                "type": "felt"
+            },
+            {
+                "name": "account_proofs_concat",
+                "type": "felt*"
+            },
+            {
+                "name": "account_proof_sizes_words_len",
+                "type": "felt"
+            },
+            {
+                "name": "account_proof_sizes_words",
+                "type": "felt*"
+            },
+            {
+                "name": "account_proof_sizes_bytes_len",
+                "type": "felt"
+            },
+            {
+                "name": "account_proof_sizes_bytes",
+                "type": "felt*"
+            },
+            {
+                "name": "storage_proofs_concat_len",
+                "type": "felt"
+            },
+            {
+                "name": "storage_proofs_concat",
+                "type": "felt*"
+            },
+            {
+                "name": "storage_proof_sizes_words_len",
+                "type": "felt"
+            },
+            {
+                "name": "storage_proof_sizes_words",
+                "type": "felt*"
+            },
+            {
+                "name": "storage_proof_sizes_bytes_len",
+                "type": "felt"
+            },
+            {
+                "name": "storage_proof_sizes_bytes",
+                "type": "felt*"
+            }
+        ],
+        "name": "mint",
+        "outputs": [],
+        "type": "function"
+    }
 ]

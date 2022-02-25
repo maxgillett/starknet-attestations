@@ -2,5 +2,6 @@
 .DS_Store
 *.sw*
 proof.json
+contract_abi.json
+contract_compiled.json
 verify_proof_compiled.json
-contract.json

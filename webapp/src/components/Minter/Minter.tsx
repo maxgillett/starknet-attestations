@@ -9,6 +9,15 @@ import { hooks, metaMask } from '../../connectors/metaMask'
 
 const { useChainId, useAccounts, useError, useIsActivating, useIsActive, useProvider, useENSNames } = hooks
 
+function encodeStatus(code: string) : string {
+  if (code === "REJECTED") {
+    return "Failed";
+  } else if (code === "ACCEPTED_ON_L1" || 
+             code === "ACCEPTED_ON_L2") {
+    return "Succeeded";
+  }
+  return "In progress";
+}
 
 export function MintBadge({ contract }: { contract?: Contract }) {
   const { account } = useStarknet();
@@ -16,9 +25,10 @@ export function MintBadge({ contract }: { contract?: Contract }) {
     invoke: mintBadge,
     hash,
     submitting,
-  } = useStarknetInvoke(contract, "incrementCounter");
+  } = useStarknetInvoke(contract, "mint");
   const transactionStatus = useTransaction(hash);
 
+  const chainId = useChainId();
   const accounts = useAccounts()
   const provider = useProvider();
   const isActive = useIsActive()
@@ -87,6 +97,7 @@ export function MintBadge({ contract }: { contract?: Contract }) {
             mintBadge && 
             encodeCallArgs(
               provider,
+              chainId!,
               accounts![0],
               account,
               token,
@@ -99,10 +110,13 @@ export function MintBadge({ contract }: { contract?: Contract }) {
           Mint Badge
         </button>
       </div>
+      {transactionStatus}
+      {hash}
       {transactionStatus && hash && (
         <div className="row">
           <h2>Latest Transaction</h2>
           <p>Status: {transactionStatus?.code}</p>
+          <p>Minting: {encodeStatus(transactionStatus?.code)}</p>
           <p>
             Hash: <VoyagerLink.Transaction transactionHash={hash} />
           </p>
