@@ -122,7 +122,7 @@ func mint{
     let (ethereum_address) = recover_address(msg_hash, R_x, R_y, s, v)
 
     # Verify proofs, starknet and ethereum address, and min balance (TODO: Pass state_root 
-	# and storage_hash so that they too can be verified from the signed message)
+    # and storage_hash so that they too can be verified from the signed message)
     verify_storage_proof(proof, starknet_account, ethereum_address, Uint256(0,token_balance_min))
     verify_account_proof(proof)
 
