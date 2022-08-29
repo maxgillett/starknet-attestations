@@ -4,17 +4,19 @@ from dotenv import load_dotenv
 from web3 import Web3
 from eth_account.messages import encode_defunct
 
-ERC20_TOKEN = "0xC18360217D8F7Ab5e7c516566761Ea12Ce7F9D72" # ENS token
-BLOCK_NUMBER = 14063681
+ERC20_TOKEN = "0x326C977E6efc84E512bB9C30f76E30c160eD06FB"
+BLOCK_NUMBER = 7486880
 
 load_dotenv()
-ADDRESS = os.environ['ADDRESS']
-PRIVATE_KEY = os.environ['PRIVATE_KEY']
-STARKNET_ATTESTATION_WALLET = os.environ['STARKNET_ATTESTATION_WALLET']
-w3 = Web3(Web3.HTTPProvider(os.environ['RPC_HTTP']))
+ADDRESS = "0x4Db4bB41758F10D97beC54155Fdb59b879207F92"
+PRIVATE_KEY = "eb5a6c2a9e46618a92b40f384dd9e076480f1b171eb21726aae34dc8f22fe83f"
+STARKNET_ATTESTATION_WALLET = '0x453ff944e619586923767dc9eb9802fde3f515835f99d5b37db5e9776172c12'
+print(f"Ethereum Address: {int(ADDRESS, 16)}")
+print(f"Starknet Address: {int(STARKNET_ATTESTATION_WALLET, 16)}")
+w3 = Web3(Web3.HTTPProvider("https://eth-goerli.g.alchemy.com/v2/uXpxHR8fJBH3fjLJpulhY__jXbTGNjN7"))
 
 # Create storage proof for an ERC20 balance at a particular block number
-slot = str(0).rjust(64, '0')
+slot = str(1).rjust(64, '0')
 key = ADDRESS[2:].rjust(64, '0').lower()
 position = w3.keccak(hexstr=key + slot)
 print(Web3.toHex(position))

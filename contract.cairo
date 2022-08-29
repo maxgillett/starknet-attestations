@@ -1,10 +1,12 @@
-%lang starknet
-
 from starkware.cairo.common.cairo_builtins import BitwiseBuiltin
 from starkware.cairo.common.cairo_builtins import HashBuiltin
 from starkware.cairo.common.uint256 import Uint256
 
-from verify_proof import Proof, encode_proof, verify_account_proof, verify_storage_proof, hash_eip191_message, recover_address
+from verify_proof import Proof, encode_proof, verify_account_proof, verify_storage_proof, hash_eip191_message, recover_address, reconstruct_big_int3
+
+from lib.bytes_utils import IntArray
+from lib.secp.bigint import BigInt3
+
 
 @event
 func mint_called(
@@ -70,7 +72,7 @@ func mint{
     account_proof_sizes_words_len : felt,
     account_proof_sizes_words : felt*,
     account_proof_sizes_bytes_len : felt,
-    account_proof_sizes_bytes : felt*,
+    account_proof_sizes_bytes : felt*,    
     storage_proofs_concat_len : felt,
     storage_proofs_concat : felt*,
     storage_proof_sizes_words_len : felt,
@@ -123,7 +125,7 @@ func mint{
 
     # Verify proofs, starknet and ethereum address, and min balance (TODO: Pass state_root 
     # and storage_hash so that they too can be verified from the signed message)
-    verify_storage_proof(proof, starknet_account, ethereum_address, Uint256(0,token_balance_min))
+    verify_storage_proof(proof, starknet_account, ethereum_address, Uint256(token_balance_min, 0))
     verify_account_proof(proof)
 
     # Write new badge entry in map
